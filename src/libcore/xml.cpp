@@ -37,7 +37,7 @@ NAMESPACE_BEGIN(xml)
 enum class Tag {
     Boolean, Integer, Float, String, Point, Vector, Spectrum, RGB,
     Transform, Translate, Matrix, Rotate, Scale, LookAt, Object,
-    NamedReference, Include, Alias, Default, Invalid
+    NamedReference, Include, Alias, Default, Resource, Invalid
 };
 
 struct Version {
@@ -77,6 +77,12 @@ struct Version {
         return os;
     }
 };
+
+// Check if the name corresponds to an unbounded spectrum property which require
+// special handling
+bool is_unbounded_spectrum(const std::string &name) {
+    return name == "eta" || name == "k" || name == "int_ior" || name == "ext_ior";
+}
 
 NAMESPACE_BEGIN(detail)
 
@@ -123,24 +129,25 @@ void register_class(const Class *class_) {
         tag_class = new std::unordered_map<std::string, const Class *>();
 
         // Create an initial mapping of tag names to IDs
-        (*tags)["boolean"]    = Tag::Boolean;
-        (*tags)["integer"]    = Tag::Integer;
-        (*tags)["float"]      = Tag::Float;
-        (*tags)["string"]     = Tag::String;
-        (*tags)["point"]      = Tag::Point;
-        (*tags)["vector"]     = Tag::Vector;
-        (*tags)["transform"]  = Tag::Transform;
-        (*tags)["translate"]  = Tag::Translate;
-        (*tags)["matrix"]     = Tag::Matrix;
-        (*tags)["rotate"]     = Tag::Rotate;
-        (*tags)["scale"]      = Tag::Scale;
-        (*tags)["lookat"]     = Tag::LookAt;
-        (*tags)["ref"]        = Tag::NamedReference;
-        (*tags)["spectrum"]   = Tag::Spectrum;
-        (*tags)["rgb"]        = Tag::RGB;
-        (*tags)["include"]    = Tag::Include;
-        (*tags)["alias"]      = Tag::Alias;
-        (*tags)["default"]    = Tag::Default;
+        (*tags)["boolean"]       = Tag::Boolean;
+        (*tags)["integer"]       = Tag::Integer;
+        (*tags)["float"]         = Tag::Float;
+        (*tags)["string"]        = Tag::String;
+        (*tags)["point"]         = Tag::Point;
+        (*tags)["vector"]        = Tag::Vector;
+        (*tags)["transform"]     = Tag::Transform;
+        (*tags)["translate"]     = Tag::Translate;
+        (*tags)["matrix"]        = Tag::Matrix;
+        (*tags)["rotate"]        = Tag::Rotate;
+        (*tags)["scale"]         = Tag::Scale;
+        (*tags)["lookat"]        = Tag::LookAt;
+        (*tags)["ref"]           = Tag::NamedReference;
+        (*tags)["spectrum"]      = Tag::Spectrum;
+        (*tags)["rgb"]           = Tag::RGB;
+        (*tags)["include"]       = Tag::Include;
+        (*tags)["alias"]         = Tag::Alias;
+        (*tags)["default"]       = Tag::Default;
+        (*tags)["path"]          = Tag::Resource;
     }
 
     // Register the new class as an object tag
@@ -349,8 +356,11 @@ void upgrade_tree(XMLSource &src, pugi::xml_node &node, const Version &version) 
 
     if (version < Version(2, 0, 0)) {
         // Upgrade all attribute names from camelCase to underscore_case
-        for (pugi::xpath_node result: node.select_nodes("//@name")) {
-            pugi::xml_attribute name_attrib = result.attribute();
+        for (pugi::xpath_node result: node.select_nodes("//*[@name]")) {
+            pugi::xml_node n = result.node();
+            if (std::strcmp(n.name(), "default") == 0)
+                continue;
+            pugi::xml_attribute name_attrib = n.attribute("name");
             std::string name = name_attrib.value();
             for (size_t i = 0; i < name.length() - 1; ++i) {
                 if (std::islower(name[i]) && std::isupper(name[i + 1])) {
@@ -366,6 +376,20 @@ void upgrade_tree(XMLSource &src, pugi::xml_node &node, const Version &version) 
         }
         for (pugi::xpath_node result: node.select_nodes("//lookAt"))
             result.node().set_name("lookat");
+        // automatically rename reserved identifiers
+        for (pugi::xpath_node result: node.select_nodes("//@id")) {
+            pugi::xml_attribute id_attrib = result.attribute();
+            char const* val = id_attrib.value();
+            if (val && val[0] == '_') {
+                std::string new_id = std::string("ID") + val + "__UPGR";
+                Log(Warn, "Changing identifier: \"%s\" -> \"%s\"", val, new_id.c_str());
+                id_attrib = new_id.c_str();
+            }
+        }
+
+        // changed parameters
+        for (pugi::xpath_node result: node.select_nodes("//bsdf[@type='diffuse']/*/@name[.='diffuse_reflectance']"))
+            result.attribute() = "reflectance";
 
         // Update 'uoffset', 'voffset', 'uscale', 'vscale' to transform block
         for (pugi::xpath_node result : node.select_nodes(
@@ -606,6 +630,26 @@ static std::pair<std::string, std::string> parse_xml(XMLSource &src, XMLParseCon
                 }
                 break;
 
+            case Tag::Resource: {
+                    check_attributes(src, node, { "value" });
+                    if (depth != 1)
+                        src.throw_error(node, "<path>: path can only be child of root");
+                    ref<FileResolver> fs = Thread::thread()->file_resolver();
+                    fs::path resource_path(node.attribute("value").value());
+                    if (!resource_path.is_absolute()) {
+                        // First try to resolve it starting in the XML file directory
+                        resource_path = fs::path(src.id).parent_path() / resource_path;
+                        // Otherwise try to resolve it with the FileResolver
+                        if (!fs::exists(resource_path))
+                            resource_path = fs->resolve(node.attribute("value").value());
+                    }
+                    if (!fs::exists(resource_path))
+                        src.throw_error(node, "<path>: folder \"%s\" not found", resource_path);
+                    fs->prepend(resource_path);
+                    return std::make_pair("", "");
+                }
+                break;
+
             case Tag::Include: {
                     check_attributes(src, node, { "filename" });
                     ref<FileResolver> fs = Thread::thread()->file_resolver();
@@ -635,6 +679,18 @@ static std::pair<std::string, std::string> parse_xml(XMLSource &src, XMLParseCon
 
                     try {
                         if (std::string(doc.begin()->name()) == "scene") {
+                            auto version_attr_incl = doc.begin()->attribute("version");
+                            if (version_attr_incl) {
+                                Version version;
+                                try {
+                                    version = version_attr_incl.value();
+                                } catch (const std::exception &) {
+                                    nested_src.throw_error(*doc.begin(), "could not parse version number \"%s\"", version_attr_incl.value());
+                                }
+                                upgrade_tree(nested_src, *doc.begin(), version);
+                                doc.begin()->remove_attribute(version_attr_incl);
+                            }
+
                             for (pugi::xml_node &ch: doc.begin()->children()) {
                                 auto [arg_name, nested_id] = parse_xml(nested_src, ctx, ch, parent_tag,
                                           props, param, arg_counter, 1);
@@ -702,7 +758,7 @@ static std::pair<std::string, std::string> parse_xml(XMLSource &src, XMLParseCon
             case Tag::Vector: {
                     detail::expand_value_to_xyz(src, node);
                     check_attributes(src, node, { "name", "x", "y", "z" });
-                    props.set_vector3f(node.attribute("name").value(),
+                    props.set_array3f(node.attribute("name").value(),
                                        detail::parse_vector(src, node));
                 }
                 break;
@@ -710,7 +766,7 @@ static std::pair<std::string, std::string> parse_xml(XMLSource &src, XMLParseCon
             case Tag::Point: {
                     detail::expand_value_to_xyz(src, node);
                     check_attributes(src, node, { "name", "x", "y", "z" });
-                    props.set_point3f(node.attribute("name").value(),
+                    props.set_array3f(node.attribute("name").value(),
                                       detail::parse_vector(src, node));
                 }
                 break;
@@ -727,39 +783,32 @@ static std::pair<std::string, std::string> parse_xml(XMLSource &src, XMLParseCon
                         src.throw_error(node, "'rgb' tag requires one or three values (got \"%s\")",
                                         node.attribute("value").value());
 
-                    Color3f col;
+                    Color3f color;
                     try {
-                        col = Color3f(detail::stof(tokens[0]),
-                                      detail::stof(tokens[1]),
-                                      detail::stof(tokens[2]));
+                        color = Color3f(detail::stof(tokens[0]),
+                                        detail::stof(tokens[1]),
+                                        detail::stof(tokens[2]));
                     } catch (...) {
                         src.throw_error(node, "could not parse RGB value \"%s\"", node.attribute("value").value());
                     }
 
                     if (!within_spectrum) {
                         std::string name = node.attribute("name").value();
-
-                        /// Spectral IOR values are unbounded and require special handling
-                        bool is_ior = name == "eta" || name == "k" || name == "int_ior" ||
-                                      name == "ext_ior";
-
-                        Properties props2(within_emitter ? "srgb_d65" : "srgb");
-                        props2.set_color("color", col);
-
-                        if (!within_emitter && is_ior)
-                            props2.set_bool("unbounded", true);
-
-                        ref<Object> obj = PluginManager::instance()->create_object(
-                            props2, Class::for_name("Texture", ctx.variant));
-                        props.set_object(node.attribute("name").value(), obj);
+                        ref<Object> obj = detail::create_texture_from_rgb(
+                            name, color, ctx.variant, within_emitter);
+                        props.set_object(name, obj);
                     } else {
-                        props.set_color("color", col);
+                        props.set_color("color", color);
                     }
                 }
                 break;
 
             case Tag::Spectrum: {
                     check_attributes(src, node, { "name", "value", "filename" }, false);
+                    std::string name = node.attribute("name").value();
+
+                    ScalarFloat const_value(1.f);
+                    std::vector<Float> wavelengths, values;
 
                     bool has_value = !node.attribute("value").empty(),
                          has_filename = !node.attribute("filename").empty(),
@@ -770,32 +819,14 @@ static std::pair<std::string, std::string> parse_xml(XMLSource &src, XMLParseCon
                         /* A constant spectrum is specified. */
                         std::vector<std::string> tokens = string::tokenize(node.attribute("value").value());
 
-                        Properties props2("uniform");
-                        ScalarFloat value;
                         try {
-                            value = detail::stof(tokens[0]);
+                            const_value = detail::stof(tokens[0]);
                         } catch (...) {
                             src.throw_error(node, "could not parse constant spectrum \"%s\"", tokens[0]);
                         }
-
-                        if (ctx.color_mode == ColorMode::Spectral && within_emitter) {
-                            props2.set_plugin_name("d65");
-                            props2.set_float("scale", value);
-                        } else {
-                            props2.set_float("value", value);
-                        }
-
-                        ref<Object> obj = PluginManager::instance()->create_object(
-                            props2, Class::for_name("Texture", ctx.variant));
-                        auto expanded = obj->expand();
-                        Assert(expanded.size() <= 1);
-                        if (!expanded.empty())
-                            obj = expanded[0];
-                        props.set_object(node.attribute("name").value(), obj);
                     } else {
                         /* Parse wavelength:value pairs, either inlined or from an external file.
                            Wavelengths are expected to be specified in increasing order. */
-                        std::vector<Float> wavelengths, values;
                         if (has_value) {
                             std::vector<std::string> tokens = string::tokenize(node.attribute("value").value());
 
@@ -818,79 +849,15 @@ static std::pair<std::string, std::string> parse_xml(XMLSource &src, XMLParseCon
                         } else if (has_filename) {
                             spectrum_from_file(node.attribute("filename").value(), wavelengths, values);
                         }
-
-                        /* Values are scaled so that integrating the spectrum against the CIE curves
-                           and converting to sRGB yields (1, 1, 1) for D65. */
-                        Float unit_conversion = 1.f;
-                        if (within_emitter || ctx.color_mode != ColorMode::Spectral)
-                            unit_conversion = MTS_CIE_Y_NORMALIZATION;
-
-                        /* Detect whether wavelengths are regularly sampled and potentially
-                           apply the conversion factor. */
-                        bool is_regular = true;
-                        Float interval = 0.f;
-
-                        for (size_t n = 0; n < wavelengths.size(); ++n) {
-                            values[n] *= unit_conversion;
-
-                            if (n <= 0)
-                                continue;
-
-                            Float distance = (wavelengths[n] - wavelengths[n - 1]);
-                            if (distance < 0.f)
-                                src.throw_error(node, "wavelengths must be specified in increasing order");
-                            if (n == 1)
-                                interval = distance;
-                            else if (std::abs(distance - interval) > math::Epsilon<Float>)
-                                is_regular = false;
-                        }
-
-                        Properties props2;
-
-                        if (is_regular) {
-                            props2.set_plugin_name("regular");
-                            props2.set_long("size", wavelengths.size());
-                            props2.set_float("lambda_min", wavelengths.front());
-                            props2.set_float("lambda_max", wavelengths.back());
-                            props2.set_pointer("values", values.data());
-                        } else {
-                            props2.set_plugin_name("irregular");
-                            props2.set_long("size", wavelengths.size());
-                            props2.set_pointer("wavelengths", wavelengths.data());
-                            props2.set_pointer("values", values.data());
-                        }
-
-                        ref<Object> obj = PluginManager::instance()->create_object(
-                            props2, Class::for_name("Texture", ctx.variant));
-
-                        // In non-spectral mode, pre-integrate against the CIE matching curves
-                        if (ctx.color_mode != ColorMode::Spectral) {
-
-                            /// Spectral IOR values are unbounded and require special handling
-                            std::string name = node.attribute("name").value();
-                            bool is_ior = name == "eta" || name == "k" || name == "int_ior" ||
-                                          name == "ext_ior";
-
-                            Color3f color = spectrum_to_rgb(wavelengths, values, !(within_emitter || is_ior));
-
-                            Properties props3;
-                            if (ctx.color_mode == ColorMode::Monochromatic) {
-                                props3 = Properties("uniform");
-                                props3.set_float("value", luminance(color));
-                            } else {
-                                props3 = Properties(within_emitter ? "srgb_d65" : "srgb");
-                                props3.set_color("color", color);
-
-                                if (!within_emitter && is_ior)
-                                    props3.set_bool("unbounded", true);
-                            }
-
-                            obj = PluginManager::instance()->create_object(
-                                props3, Class::for_name("Texture", ctx.variant));
-                        }
-
-                        props.set_object(node.attribute("name").value(), obj);
                     }
+
+                    ref<Object> obj = detail::create_texture_from_spectrum(
+                        name, const_value, wavelengths, values, ctx.variant,
+                        within_emitter,
+                        ctx.color_mode == ColorMode::Spectral,
+                        ctx.color_mode == ColorMode::Monochromatic);
+
+                    props.set_object(name, obj);
                 }
                 break;
 
@@ -932,11 +899,18 @@ static std::pair<std::string, std::string> parse_xml(XMLSource &src, XMLParseCon
                 break;
 
             case Tag::LookAt: {
+                    if (!node.attribute("up"))
+                        node.append_attribute("up") = "0,0,0";
+
                     check_attributes(src, node, { "origin", "target", "up" });
 
                     Point3f origin = parse_named_vector(src, node, "origin");
                     Point3f target = parse_named_vector(src, node, "target");
                     Vector3f up = parse_named_vector(src, node, "up");
+
+                    if (squared_norm(up) == 0)
+                        std::tie(up, std::ignore) =
+                            coordinate_system(normalize(target - origin));
 
                     auto result = Transform4f::look_at(origin, target, up);
                     if (any_nested(enoki::isnan(result.matrix)))
@@ -948,18 +922,34 @@ static std::pair<std::string, std::string> parse_xml(XMLSource &src, XMLParseCon
             case Tag::Matrix: {
                     check_attributes(src, node, { "value" });
                     std::vector<std::string> tokens = string::tokenize(node.attribute("value").value());
-                    if (tokens.size() != 16)
-                        Throw("matrix: expected 16 values");
+                    if (tokens.size() != 16 && tokens.size() != 9)
+                        Throw("matrix: expected 16 or 9 values");
                     Matrix4f matrix;
-                    for (int i = 0; i < 4; ++i) {
-                        for (int j = 0; j < 4; ++j) {
-                            try {
-                                matrix(i, j) = detail::stof(tokens[i * 4 + j]);
-                            } catch (...) {
-                                src.throw_error(node, "could not parse floating point value \"%s\"",
-                                                tokens[i * 4 + j]);
+                    if (tokens.size() == 16) {
+                        for (int i = 0; i < 4; ++i) {
+                            for (int j = 0; j < 4; ++j) {
+                                try {
+                                    matrix(i, j) = detail::stof(tokens[i * 4 + j]);
+                                } catch (...) {
+                                    src.throw_error(node, "could not parse floating point value \"%s\"",
+                                                    tokens[i * 4 + j]);
+                                }
                             }
                         }
+                    } else {
+                        Log(Warn, "3x3 matrix will be stored as a 4x4 matrix, with the same last row and column as the identity matrix.");
+                        Matrix3f mat3;
+                        for (int i = 0; i < 3; ++i) {
+                            for (int j = 0; j < 3; ++j) {
+                                try {
+                                    mat3(i, j) = detail::stof(tokens[i * 3 + j]);
+                                } catch (...) {
+                                    src.throw_error(node, "could not parse floating point value \"%s\"",
+                                                    tokens[i * 3 + j]);
+                                }
+                            }
+                        }
+                        matrix = Matrix4f(mat3);
                     }
                     ctx.transform = Transform4f(matrix) * ctx.transform;
                 }
@@ -1029,7 +1019,7 @@ static ref<Object> instantiate_node(XMLParseContext &ctx, const std::string &id)
                 } else {
                     int ctr = 0;
                     for (auto c : children)
-                        props.set_object(kv.first + "_" + std::to_string(ctr++), children[0], false);
+                        props.set_object(kv.first + "_" + std::to_string(ctr++), c, false);
                 }
             } catch (const std::exception &e) {
                 if (strstr(e.what(), "Error while loading") == nullptr)
@@ -1080,6 +1070,109 @@ static ref<Object> instantiate_node(XMLParseContext &ctx, const std::string &id)
     return inst.object;
 }
 
+ref<Object> create_texture_from_rgb(const std::string &name,
+                                    Color<float, 3> color,
+                                    const std::string &variant,
+                                    bool within_emitter) {
+    Properties props(within_emitter ? "srgb_d65" : "srgb");
+    props.set_color("color", color);
+
+    if (!within_emitter && is_unbounded_spectrum(name))
+        props.set_bool("unbounded", true);
+
+    return PluginManager::instance()->create_object(
+        props, Class::for_name("Texture", variant));
+}
+
+ref<Object> create_texture_from_spectrum(const std::string &name,
+                                         float const_value,
+                                         std::vector<float> &wavelengths,
+                                         std::vector<float> &values,
+                                         const std::string &variant,
+                                         bool within_emitter,
+                                         bool is_spectral_mode,
+                                         bool is_monochromatic_mode) {
+    const Class *class_ = Class::for_name("Texture", variant);
+
+    if (wavelengths.empty()) {
+        Properties props("uniform");
+        if (within_emitter && is_spectral_mode) {
+            props.set_plugin_name("d65");
+            props.set_float("scale", const_value);
+        } else {
+            props.set_float("value", const_value);
+        }
+
+        ref<Object> obj = PluginManager::instance()->create_object(props, class_);
+        auto expanded = obj->expand();
+        Assert(expanded.size() <= 1);
+        if (!expanded.empty())
+            obj = expanded[0];
+        return obj;
+    } else {
+        /* Values are scaled so that integrating the spectrum against the CIE curves
+            and converting to sRGB yields (1, 1, 1) for D65. */
+        float unit_conversion = 1.f;
+        if (within_emitter || !is_spectral_mode)
+            unit_conversion = MTS_CIE_Y_NORMALIZATION;
+
+        /* Detect whether wavelengths are regularly sampled and potentially
+            apply the conversion factor. */
+        bool is_regular = true;
+        float interval = 0.f;
+
+        for (size_t n = 0; n < wavelengths.size(); ++n) {
+            values[n] *= unit_conversion;
+
+            if (n <= 0)
+                continue;
+
+            float distance = (wavelengths[n] - wavelengths[n - 1]);
+            if (distance < 0.f)
+                Throw("Wavelengths must be specified in increasing order!");
+            if (n == 1)
+                interval = distance;
+            else if (std::abs(distance - interval) > math::Epsilon<float>)
+                is_regular = false;
+        }
+
+        if (is_spectral_mode) {
+            Properties props;
+            if (is_regular) {
+                props.set_plugin_name("regular");
+                props.set_long("size", wavelengths.size());
+                props.set_float("lambda_min", wavelengths.front());
+                props.set_float("lambda_max", wavelengths.back());
+                props.set_pointer("values", values.data());
+            } else {
+                props.set_plugin_name("irregular");
+                props.set_long("size", wavelengths.size());
+                props.set_pointer("wavelengths", wavelengths.data());
+                props.set_pointer("values", values.data());
+            }
+            return PluginManager::instance()->create_object(props, class_);
+        } else {
+            // In non-spectral mode, pre-integrate against the CIE matching curves
+            Color3f color = spectrum_to_rgb(
+                wavelengths, values, !(within_emitter || is_unbounded_spectrum(name)));
+
+            Properties props;
+            if (is_monochromatic_mode) {
+                props = Properties("uniform");
+                props.set_float("value", luminance(color));
+            } else {
+                props = Properties(within_emitter ? "srgb_d65" : "srgb");
+                props.set_color("color", color);
+
+                if (!within_emitter && is_unbounded_spectrum(name))
+                    props.set_bool("unbounded", true);
+            }
+
+            return PluginManager::instance()->create_object(props, class_);
+        }
+    }
+}
+
 NAMESPACE_END(detail)
 
 ref<Object> load_string(const std::string &string, const std::string &variant,
@@ -1098,13 +1191,24 @@ ref<Object> load_string(const std::string &string, const std::string &variant,
         Throw("Error while loading \"%s\" (at %s): %s", src.id,
               src.offset(result.offset), result.description());
 
-    pugi::xml_node root = doc.document_element();
-    detail::XMLParseContext ctx(variant);
-    Properties prop;
-    size_t arg_counter; // Unused
-    auto scene_id = detail::parse_xml(src, ctx, root, Tag::Invalid, prop,
-                                      param, arg_counter, 0).second;
-    return detail::instantiate_node(ctx, scene_id);
+    // Make a backup copy of the FileResolver, which will be restored after parsing
+    ref<FileResolver> fs_backup = Thread::thread()->file_resolver();
+    Thread::thread()->set_file_resolver(new FileResolver(*fs_backup));
+
+    try {
+        pugi::xml_node root = doc.document_element();
+        detail::XMLParseContext ctx(variant);
+        Properties prop;
+        size_t arg_counter; // Unused
+        auto scene_id = detail::parse_xml(src, ctx, root, Tag::Invalid, prop,
+                                          param, arg_counter, 0).second;
+        ref<Object> obj = detail::instantiate_node(ctx, scene_id);
+        Thread::thread()->set_file_resolver(fs_backup.get());
+        return obj;
+    } catch(...) {
+        Thread::thread()->set_file_resolver(fs_backup.get());
+        throw;
+    }
 }
 
 ref<Object> load_file(const fs::path &filename_, const std::string &variant,
@@ -1131,39 +1235,49 @@ ref<Object> load_file(const fs::path &filename_, const std::string &variant,
         Throw("Error while loading \"%s\" (at %s): %s", src.id,
               src.offset(result.offset), result.description());
 
-    pugi::xml_node root = doc.document_element();
+    // Make a backup copy of the FileResolver, which will be restored after parsing
+    ref<FileResolver> fs_backup = Thread::thread()->file_resolver();
+    Thread::thread()->set_file_resolver(new FileResolver(*fs_backup));
 
-    detail::XMLParseContext ctx(variant);
-    Properties prop;
-    size_t arg_counter = 0; // Unused
-    auto scene_id = detail::parse_xml(src, ctx, root, Tag::Invalid, prop,
-                                      param, arg_counter, 0).second;
+    try {
+        pugi::xml_node root = doc.document_element();
+        detail::XMLParseContext ctx(variant);
+        Properties prop;
+        size_t arg_counter = 0; // Unused
+        auto scene_id = detail::parse_xml(src, ctx, root, Tag::Invalid, prop,
+                                          param, arg_counter, 0).second;
 
-    if (src.modified && write_update) {
-        fs::path backup = filename;
-        backup.replace_extension(".bak");
-        Log(Info, "Writing updated \"%s\" .. (backup at \"%s\")", filename, backup);
-        if (!fs::rename(filename, backup))
-            Throw("Unable to rename file \"%s\" to \"%s\"!", filename, backup);
+        if (src.modified && write_update) {
+            fs::path backup = filename;
+            backup.replace_extension(".bak");
+            Log(Info, "Writing updated \"%s\" .. (backup at \"%s\")", filename, backup);
+            if (!fs::rename(filename, backup))
+                Throw("Unable to rename file \"%s\" to \"%s\"!", filename, backup);
 
-        // Update version number
-        root.prepend_attribute("version").set_value(MTS_VERSION);
-        if (root.attribute("type").value() == std::string("scene"))
-            root.remove_attribute("type");
+            // Update version number
+            root.prepend_attribute("version").set_value(MTS_VERSION);
+            if (root.attribute("type").value() == std::string("scene"))
+                root.remove_attribute("type");
 
-        // Strip anonymous IDs/names
-        for (pugi::xpath_node result2: doc.select_nodes("//*[starts-with(@id, '_unnamed_')]"))
-            result2.node().remove_attribute("id");
-        for (pugi::xpath_node result2: doc.select_nodes("//*[starts-with(@name, '_arg_')]"))
-            result2.node().remove_attribute("name");
+            // Strip anonymous IDs/names
+            for (pugi::xpath_node result2: doc.select_nodes("//*[starts-with(@id, '_unnamed_')]"))
+                result2.node().remove_attribute("id");
+            for (pugi::xpath_node result2: doc.select_nodes("//*[starts-with(@name, '_arg_')]"))
+                result2.node().remove_attribute("name");
 
-        doc.save_file(filename.native().c_str(), "    ");
+            doc.save_file(filename.native().c_str(), "    ");
 
-        // Update for detail::file_offset
-        filename = backup;
+            // Update for detail::file_offset
+            filename = backup;
+        }
+
+        ref<Object> obj = detail::instantiate_node(ctx, scene_id);
+        Thread::thread()->set_file_resolver(fs_backup.get());
+        return obj;
+    } catch(...) {
+        Thread::thread()->set_file_resolver(fs_backup.get());
+        throw;
     }
-
-    return detail::instantiate_node(ctx, scene_id);
 }
 
 NAMESPACE_END(xml)

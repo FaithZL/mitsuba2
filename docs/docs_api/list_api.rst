@@ -28,6 +28,8 @@
 
 .. autoclass:: mitsuba.core.DiscreteDistribution
 
+.. autoclass:: mitsuba.core.DiscreteDistribution2D
+
 .. autoclass:: mitsuba.core.DummyStream
 
 .. autoclass:: mitsuba.core.FileResolver
@@ -118,6 +120,8 @@
 
 .. autoclass:: mitsuba.core.PCG32
 
+.. autoclass:: mitsuba.core.PluginManager
+
 .. autoclass:: mitsuba.core.Point0f
 
 .. autoclass:: mitsuba.core.Point0i
@@ -201,6 +205,10 @@
 .. autoclass:: mitsuba.core.ScalarPoint3i
 
 .. autoclass:: mitsuba.core.ScalarPoint3u
+
+.. autoclass:: mitsuba.core.ScalarTransform3f
+
+.. autoclass:: mitsuba.core.ScalarTransform4f
 
 .. autoclass:: mitsuba.core.ScalarUInt32
 
@@ -336,6 +344,8 @@
 
 .. autofunction:: mitsuba.core.is_spectral
 
+.. autofunction:: mitsuba.core.luminance
+
 .. autofunction:: mitsuba.core.math.E
 
 .. autofunction:: mitsuba.core.math.Epsilon
@@ -408,6 +418,10 @@
 
 .. autofunction:: mitsuba.core.pdf_uniform_spectrum
 
+.. autofunction:: mitsuba.core.permute
+
+.. autofunction:: mitsuba.core.permute_kensler
+
 .. autofunction:: mitsuba.core.quad.composite_simpson
 
 .. autofunction:: mitsuba.core.quad.composite_simpson_38
@@ -416,7 +430,11 @@
 
 .. autofunction:: mitsuba.core.quad.gauss_lobatto
 
+.. autofunction:: mitsuba.core.radical_inverse_2
+
 .. autofunction:: mitsuba.core.sample_rgb_spectrum
+
+.. autofunction:: mitsuba.core.sample_tea_32
 
 .. autofunction:: mitsuba.core.sample_tea_float
 
@@ -429,6 +447,8 @@
 .. autofunction:: mitsuba.core.set_property
 
 .. autofunction:: mitsuba.core.set_thread_count
+
+.. autofunction:: mitsuba.core.sobol_2
 
 .. autofunction:: mitsuba.core.spline.eval_1d
 
@@ -546,6 +566,8 @@
 
 .. autofunction:: mitsuba.core.warp.von_mises_fisher_to_square
 
+.. autofunction:: mitsuba.core.xml.load_dict
+
 .. autofunction:: mitsuba.core.xml.load_file
 
 .. autofunction:: mitsuba.core.xml.load_string
@@ -569,6 +591,8 @@
 .. autoclass:: mitsuba.render.Endpoint
 
 .. autoclass:: mitsuba.render.Film
+
+.. autoclass:: mitsuba.render.HitComputeFlags
 
 .. autoclass:: mitsuba.render.ImageBlock
 
@@ -595,6 +619,8 @@
 .. autoclass:: mitsuba.render.PhaseFunctionFlags
 
 .. autoclass:: mitsuba.render.PositionSample3f
+
+.. autoclass:: mitsuba.render.PreliminaryIntersection3f
 
 .. autoclass:: mitsuba.render.ProjectiveCamera
 
@@ -698,6 +724,10 @@
 
 .. autoclass:: mitsuba.python.chi2.SphericalDomain
 
+.. autoclass:: mitsuba.python.util.ParameterMap
+
+.. autofunction:: mitsuba.python.util.is_differentiable
+
 .. autofunction:: mitsuba.python.util.traverse
 
 .. autofunction:: mitsuba.python.math.rlgamma
@@ -708,13 +738,21 @@
 
 .. autoclass:: mitsuba.python.autodiff.SGD
 
-.. autofunction:: mitsuba.python.autodiff.render
+.. autofunction:: mitsuba.python.autodiff._render_helper
 
-.. autofunction:: mitsuba.python.autodiff.render_diff
+.. autofunction:: mitsuba.python.autodiff.render
 
 .. autofunction:: mitsuba.python.autodiff.render_torch
 
 .. autofunction:: mitsuba.python.autodiff.write_bitmap
+
+.. autoclass:: mitsuba.python.xml.Files
+
+.. autoclass:: mitsuba.python.xml.WriteXML
+
+.. autofunction:: mitsuba.python.xml.copy2
+
+.. autofunction:: mitsuba.python.xml.dict_to_xml
 
 .. autofunction:: mitsuba.python.test.util.fresolver_append_path
 

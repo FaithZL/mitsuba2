@@ -2,7 +2,7 @@ import mitsuba
 import pytest
 import enoki as ek
 
-from .mesh_generation import create_stairs, create_stairs_packet
+from .mesh_generation import create_stairs
 
 from mitsuba.python.test.util import fresolver_append_path
 
@@ -71,7 +71,7 @@ def test02_depth_scalar_bunny(variant_scalar_rgb):
     scene = load_string("""
         <scene version="0.5.0">
             <shape type="ply">
-                <string name="filename" value="resources/data/ply/bunny_lowres.ply"/>
+                <string name="filename" value="resources/data/common/meshes/bunny_lowres.ply"/>
             </shape>
         </scene>
     """)
@@ -106,7 +106,7 @@ def test03_depth_packet_stairs(variant_packet_rgb):
         pytest.skip("EMBREE enabled")
 
     props = Properties("scene")
-    props["_unnamed_0"] = create_stairs_packet(11)
+    props["_unnamed_0"] = create_stairs(11)
     scene = Scene(props)
 
     mitsuba.set_variant("scalar_rgb")

@@ -1,5 +1,6 @@
 import pytest
 
+import enoki as ek
 import mitsuba
 from mitsuba.python.test.util import fresolver_append_path
 
@@ -48,3 +49,56 @@ def test01_emitter_checks(variant_scalar_rgb):
                 + shape_xml.format('<emitter type="area" id="my_inner_emitter"/>')
                 + shape_xml.format('<ref id="my_emitter"/>'), 4)
 
+@fresolver_append_path
+def test02_shapes(variant_scalar_rgb):
+    from mitsuba.core.xml import load_string
+
+    """Tests that a Shape is downcasted to a Mesh in the Scene::shapes method if possible"""
+    scene = load_string("""
+        <scene version="2.0.0">
+            <shape type="obj" >
+                <string name="filename" value="resources/data/tests/obj/cbox_smallbox.obj"/>
+            </shape>
+            <shape type="sphere"/>
+        </scene>
+    """)
+
+    shapes = scene.shapes()
+    assert len(shapes) == 2
+    assert sum(type(s) == mitsuba.render.Mesh  for s in shapes) == 1
+    assert sum(type(s) == mitsuba.render.Shape for s in shapes) == 1
+
+
+@fresolver_append_path
+def test03_shapes_parameters_grad_enabled(variant_gpu_autodiff_rgb):
+    from mitsuba.core.xml import load_string
+    from mitsuba.python.util import traverse
+
+    scene = load_string("""
+        <scene version="2.0.0">
+            <shape type="obj" id="box">
+                <string name="filename" value="resources/data/tests/obj/cbox_smallbox.obj"/>
+            </shape>
+            <shape type="sphere"/>
+        </scene>
+    """)
+
+    # Initial scene should always return False
+    assert scene.shapes_grad_enabled() == False
+
+    # Get scene parameters
+    params = traverse(scene)
+
+    # Only parameters of the shape should affect the result of that method
+    bsdf_param_key = 'box.bsdf.reflectance.value'
+    ek.set_requires_gradient(params[bsdf_param_key])
+    params.set_dirty(bsdf_param_key)
+    params.update()
+    assert scene.shapes_grad_enabled() == False
+
+    # When setting one of the shape's param to require gradient, method should return True
+    shape_param_key = 'box.vertex_positions_buf'
+    ek.set_requires_gradient(params[shape_param_key])
+    params.set_dirty(shape_param_key)
+    params.update()
+    assert scene.shapes_grad_enabled() == True

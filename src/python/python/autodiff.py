@@ -22,7 +22,7 @@ def _render_helper(scene, spp=None, sensor_index=0):
     total_sample_count = ek.hprod(film_size) * spp
 
     if sampler.wavefront_size() != total_sample_count:
-        sampler.seed(ek.arange(UInt64, total_sample_count))
+        sampler.seed(0, total_sample_count)
 
     pos = ek.arange(UInt32, total_sample_count)
     pos //= spp
@@ -361,6 +361,7 @@ class Adam(Optimizer):
             u = type(p)(u)
             ek.set_requires_gradient(u)
             self.params[k] = u
+        self.params.update()
 
     def _reset(self, key):
         """ Zero-initializes the internal state associated with a parameter """
@@ -413,6 +414,7 @@ def render_torch(scene, params=None, **kwargs):
                             ctx.inputs.append(None)
                             ctx.inputs.append(params[k] if v.requires_grad
                                               else None)
+                            continue
 
                         ctx.inputs.append(None)
                         ctx.inputs.append(None)

@@ -27,6 +27,9 @@ scenes = glob.glob(join(TEST_SCENE_DIR, '*', '*.xml'))
 # List of test scene folders to exclude
 EXCLUDE_FOLDERS = []
 
+# Don't test participating media in GPU modes 
+# to reduce the time needed to run all tests
+GPU_EXCLUDE_FOLDERS = ['participating_media']
 
 def get_ref_fname(scene_fname):
     for color_mode in color_modes:
@@ -85,6 +88,9 @@ def test_render(variants_all, scene_fname):
 
     if os.path.split(scene_dir)[1] in EXCLUDE_FOLDERS:
         pytest.skip(f"Skip rendering scene {scene_fname}")
+
+    if 'gpu' in mitsuba.variant() and os.path.split(scene_dir)[1] in GPU_EXCLUDE_FOLDERS:
+        pytest.skip(f"Skip rendering scene {scene_fname} in GPU mode")
 
     Thread.thread().file_resolver().prepend(scene_dir)
 
@@ -202,6 +208,7 @@ if __name__ == '__main__':
             img, var_img = bitmap_extract(bmp)
 
             # Write rendered image to a file
+            os.makedirs(dirname(ref_fname), exist_ok=True)
             xyz_to_rgb_bmp(img).write(ref_fname)
             print('Saved rendered image to: ' + ref_fname)
 

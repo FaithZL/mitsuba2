@@ -4,15 +4,12 @@
 #include <mitsuba/core/transform.h>
 #include <mitsuba/core/util.h>
 #include <mitsuba/core/warp.h>
-#include <mitsuba/render/bsdf.h>
-#include <mitsuba/render/emitter.h>
 #include <mitsuba/render/fwd.h>
 #include <mitsuba/render/interaction.h>
-#include <mitsuba/render/sensor.h>
 #include <mitsuba/render/shape.h>
 
-#if defined(MTS_ENABLE_EMBREE)
-    #include <embree3/rtcore.h>
+#if defined(MTS_ENABLE_OPTIX)
+    #include "optix/sphere.cuh"
 #endif
 
 NAMESPACE_BEGIN(mitsuba)
@@ -28,10 +25,10 @@ Sphere (:monosp:`sphere`)
 
  * - center
    - |point|
-   - Center of the sphere in object-space (Default: (0, 0, 0))
+   - Center of the sphere (Default: (0, 0, 0))
  * - radius
    - |float|
-   - Radius of the sphere in object-space units (Default: 1)
+   - Radius of the sphere (Default: 1)
  * - flip_normals
    - |bool|
    - Is the sphere inverted, i.e. should the normal vectors be flipped? (Default:|false|, i.e.
@@ -39,7 +36,7 @@ Sphere (:monosp:`sphere`)
  * - to_world
    - |transform|
    -  Specifies an optional linear object-to-world transformation.
-      Note that non-uniform scales are not permitted!
+      Note that non-uniform scales and shears are not permitted!
       (Default: none, i.e. object space = world space)
 
 .. subfigstart::
@@ -85,49 +82,53 @@ This makes it a good default choice for lighting new scenes.
    :caption: Spherical area light modeled using the :ref:`sphere <shape-sphere>` plugin
 .. subfigend::
    :label: fig-sphere-light
-
-
-.. warning:: This plugin is currently not supported by the Embree and OptiX raytracing backend.
-
  */
 
 template <typename Float, typename Spectrum>
 class Sphere final : public Shape<Float, Spectrum> {
 public:
-    MTS_IMPORT_BASE(Shape, bsdf, emitter, is_emitter)
+    MTS_IMPORT_BASE(Shape, m_to_world, m_to_object, set_children,
+                    get_children_string, parameters_grad_enabled)
     MTS_IMPORT_TYPES()
 
     using typename Base::ScalarSize;
 
     Sphere(const Properties &props) : Base(props) {
-        m_object_to_world =
-            ScalarTransform4f::translate(ScalarVector3f(props.point3f("center", ScalarPoint3f(0.f))));
-        m_radius = props.float_("radius", 1.f);
-
-        if (props.has_property("to_world")) {
-            ScalarTransform4f object_to_world = props.transform("to_world");
-            ScalarFloat radius = norm(object_to_world * ScalarVector3f(1, 0, 0));
-            // Remove the scale from the object-to-world transform
-            m_object_to_world =
-                object_to_world
-                * ScalarTransform4f::scale(ScalarVector3f(1.f / radius))
-                * m_object_to_world;
-            m_radius *= radius;
-        }
-
         /// Are the sphere normals pointing inwards? default: no
         m_flip_normals = props.bool_("flip_normals", false);
-        m_center = m_object_to_world * ScalarPoint3f(0, 0, 0);
-        m_world_to_object = m_object_to_world.inverse();
-        m_inv_surface_area = 1.f / surface_area();
+
+        // Update the to_world transform if radius and center are also provided
+        m_to_world = m_to_world * ScalarTransform4f::translate(props.point3f("center", 0.f));
+        m_to_world = m_to_world * ScalarTransform4f::scale(props.float_("radius", 1.f));
+
+        update();
+        set_children();
+    }
+
+    void update() {
+        // Extract center and radius from to_world matrix (25 iterations for numerical accuracy)
+        auto [S, Q, T] = transform_decompose(m_to_world.matrix, 25);
+
+        if (abs(S[0][1]) > 1e-6f || abs(S[0][2]) > 1e-6f || abs(S[1][0]) > 1e-6f ||
+            abs(S[1][2]) > 1e-6f || abs(S[2][0]) > 1e-6f || abs(S[2][1]) > 1e-6f)
+            Log(Warn, "'to_world' transform shouldn't contain any shearing!");
+
+        if (!(abs(S[0][0] - S[1][1]) < 1e-6f && abs(S[0][0] - S[2][2]) < 1e-6f))
+            Log(Warn, "'to_world' transform shouldn't contain non-uniform scaling!");
+
+        m_center = T;
+        m_radius = S[0][0];
 
         if (m_radius <= 0.f) {
             m_radius = std::abs(m_radius);
             m_flip_normals = !m_flip_normals;
         }
 
-        if (is_emitter())
-            emitter()->set_shape(this);
+        // Reconstruct the to_world transform with uniform scaling and no shear
+        m_to_world = transform_compose(ScalarMatrix3f(m_radius), Q, T);
+        m_to_object = m_to_world.inverse();
+
+        m_inv_surface_area = rcp(surface_area());
     }
 
     ScalarBoundingBox3f bbox() const override {
@@ -149,11 +150,11 @@ public:
                                      Mask active) const override {
         MTS_MASK_ARGUMENT(active);
 
-        Point3f p = warp::square_to_uniform_sphere(sample);
+        Point3f local = warp::square_to_uniform_sphere(sample);
 
         PositionSample3f ps;
-        ps.p = fmadd(p, m_radius, m_center);
-        ps.n = p;
+        ps.p = fmadd(local, m_radius, m_center);
+        ps.n = local;
 
         if (m_flip_normals)
             ps.n = -ps.n;
@@ -173,7 +174,6 @@ public:
     DirectionSample3f sample_direction(const Interaction3f &it, const Point2f &sample,
                                        Mask active) const override {
         MTS_MASK_ARGUMENT(active);
-
         DirectionSample3f result = zero<DirectionSample3f>();
 
         Vector3f dc_v = m_center - it.p;
@@ -269,21 +269,22 @@ public:
     //! @{ \name Ray tracing routines
     // =============================================================
 
-    std::pair<Mask, Float> ray_intersect(const Ray3f &ray, Float * /*cache*/,
-                                         Mask active) const override {
+    PreliminaryIntersection3f ray_intersect_preliminary(const Ray3f &ray,
+                                                        Mask active) const override {
         MTS_MASK_ARGUMENT(active);
 
-        using Float64  = float64_array_t<Float>;
+        using Double = std::conditional_t<is_cuda_array_v<Float>, Float, Float64>;
+        using Double3 = Vector<Double, 3>;
 
-        Float64 mint = Float64(ray.mint);
-        Float64 maxt = Float64(ray.maxt);
+        Double mint = Double(ray.mint);
+        Double maxt = Double(ray.maxt);
 
-        Vector3d o = Vector3d(ray.o) - Vector3d(m_center);
-        Vector3d d(ray.d);
+        Double3 o = Double3(ray.o) - Double3(m_center);
+        Double3 d(ray.d);
 
-        Float64 A = squared_norm(d);
-        Float64 B = 2.0 * dot(o, d);
-        Float64 C = squared_norm(o) - sqr((double) m_radius);
+        Double A = squared_norm(d);
+        Double B = scalar_t<Double>(2.f) * dot(o, d);
+        Double C = squared_norm(o) - sqr((scalar_t<Double>) m_radius);
 
         auto [solution_found, near_t, far_t] = math::solve_quadratic(A, B, C);
 
@@ -293,26 +294,32 @@ public:
         // Sphere fully contains the segment of the ray
         Mask in_bounds = near_t < mint && far_t > maxt;
 
-        Mask valid_intersection =
-            active && solution_found && !out_bounds && !in_bounds;
+        active &= solution_found && !out_bounds && !in_bounds;
 
-        return { valid_intersection, select(near_t < mint, far_t, near_t) };
+        PreliminaryIntersection3f pi = zero<PreliminaryIntersection3f>();
+        pi.t = select(active,
+                      select(near_t < mint, Float(far_t), Float(near_t)),
+                      math::Infinity<Float>);
+        pi.shape = this;
+
+        return pi;
     }
 
     Mask ray_test(const Ray3f &ray, Mask active) const override {
         MTS_MASK_ARGUMENT(active);
 
-        using Float64 = float64_array_t<Float>;
+        using Double = std::conditional_t<is_cuda_array_v<Float>, Float, Float64>;
+        using Double3 = Vector<Double, 3>;
 
-        Float64 mint = Float64(ray.mint);
-        Float64 maxt = Float64(ray.maxt);
+        Double mint = Double(ray.mint);
+        Double maxt = Double(ray.maxt);
 
-        Vector3d o = Vector3d(ray.o) - Vector3d(m_center);
-        Vector3d d(ray.d);
+        Double3 o = Double3(ray.o) - Double3(m_center);
+        Double3 d(ray.d);
 
-        Float64 A = squared_norm(d);
-        Float64 B = 2.0 * dot(o, d);
-        Float64 C = squared_norm(o) - sqr((double) m_radius);
+        Double A = squared_norm(d);
+        Double B = scalar_t<Double>(2.f) * dot(o, d);
+        Double C = squared_norm(o) - sqr((scalar_t<Double>) m_radius);
 
         auto [solution_found, near_t, far_t] = math::solve_quadratic(A, B, C);
 
@@ -325,132 +332,129 @@ public:
         return solution_found && !out_bounds && !in_bounds && active;
     }
 
-    void fill_surface_interaction(const Ray3f &ray, const Float * /*cache*/,
-                                  SurfaceInteraction3f &si_out, Mask active) const override {
+    SurfaceInteraction3f compute_surface_interaction(const Ray3f &ray,
+                                                     PreliminaryIntersection3f pi,
+                                                     HitComputeFlags flags,
+                                                     Mask active) const override {
         MTS_MASK_ARGUMENT(active);
 
-        SurfaceInteraction3f si(si_out);
+        bool differentiable = false;
+        if constexpr (is_diff_array_v<Float>)
+            differentiable = requires_gradient(ray.o) ||
+                             requires_gradient(ray.d) ||
+                             parameters_grad_enabled();
 
-        if constexpr (is_diff_array_v<Float>) {
-            // Recompute the intersection if derivative information is desired.
-            Vector3f o = ray.o - m_center;
-            Float A = squared_norm(ray.d);
-            Float B = 2.f * dot(o, ray.d);
-            Float C = squared_norm(o) - sqr(m_radius);
+        // Recompute ray intersection to get differentiable prim_uv and t
+        if (differentiable && !has_flag(flags, HitComputeFlags::NonDifferentiable))
+            pi = ray_intersect_preliminary(ray, active);
 
-            auto [solution_found, near_t, far_t] = math::solve_quadratic(A, B, C);
+        active &= pi.is_valid();
 
-            // Sphere doesn't intersect with the segment on the ray
-            Mask out_bounds = !(near_t <= ray.maxt && far_t >= ray.mint); // NaN-aware conditionals
+        SurfaceInteraction3f si = zero<SurfaceInteraction3f>();
+        si.t = select(active, pi.t, math::Infinity<Float>);
 
-            // Sphere fully contains the segment of the ray
-            Mask in_bounds = near_t < ray.mint && far_t > ray.maxt;
-
-            Mask valid_intersection =
-                active && solution_found && !out_bounds && !in_bounds;
-
-            si.t[valid_intersection] = select(near_t < ray.mint, far_t, near_t);
-        }
-
-        si.sh_frame.n = normalize(ray(si.t) - m_center);
+        si.sh_frame.n = normalize(ray(pi.t) - m_center);
 
         // Re-project onto the sphere to improve accuracy
         si.p = fmadd(si.sh_frame.n, m_radius, m_center);
 
-        Vector3f local   = m_world_to_object * (si.p - m_center),
-                d       = local / m_radius;
+        if (likely(has_flag(flags, HitComputeFlags::UV))) {
+            Vector3f local = m_to_object.transform_affine(si.p);
 
-        Float   rd_2    = sqr(d.x()) + sqr(d.y()),
-                theta   = unit_angle_z(d),
-                phi     = atan2(d.y(), d.x());
+            Float rd_2  = sqr(local.x()) + sqr(local.y()),
+                  theta = unit_angle_z(local),
+                  phi   = atan2(local.y(), local.x());
 
-        masked(phi, phi < 0.f) += 2.f * math::Pi<Float>;
+            masked(phi, phi < 0.f) += 2.f * math::Pi<Float>;
 
-        si.uv = Point2f(phi * math::InvTwoPi<Float>, theta * math::InvPi<Float>);
-        si.dp_du = Vector3f(-local.y(), local.x(), 0.f);
+            si.uv = Point2f(phi * math::InvTwoPi<Float>, theta * math::InvPi<Float>);
+            if (likely(has_flag(flags, HitComputeFlags::dPdUV))) {
+                si.dp_du = Vector3f(-local.y(), local.x(), 0.f);
 
-        Float rd      = sqrt(rd_2),
-              inv_rd  = rcp(rd),
-              cos_phi = d.x() * inv_rd,
-              sin_phi = d.y() * inv_rd;
+                Float rd      = sqrt(rd_2),
+                      inv_rd  = rcp(rd),
+                      cos_phi = local.x() * inv_rd,
+                      sin_phi = local.y() * inv_rd;
 
-        si.dp_dv = Vector3f(local.z() * cos_phi,
-                           local.z() * sin_phi,
-                           -rd * m_radius);
+                si.dp_dv = Vector3f(local.z() * cos_phi,
+                                    local.z() * sin_phi,
+                                    -rd);
 
-        Mask singularity_mask = active && eq(rd, 0.f);
-        if (unlikely(any(singularity_mask)))
-            si.dp_dv[singularity_mask] = Vector3f(m_radius, 0.f, 0.f);
+                Mask singularity_mask = active && eq(rd, 0.f);
+                if (unlikely(any(singularity_mask)))
+                    si.dp_dv[singularity_mask] = Vector3f(1.f, 0.f, 0.f);
 
-        si.dp_du = m_object_to_world * si.dp_du * (2.f * math::Pi<Float>);
-        si.dp_dv = m_object_to_world * si.dp_dv * math::Pi<Float>;
+                si.dp_du = m_to_world * si.dp_du * (2.f * math::Pi<Float>);
+                si.dp_dv = m_to_world * si.dp_dv * math::Pi<Float>;
+            }
+        }
 
         if (m_flip_normals)
             si.sh_frame.n = -si.sh_frame.n;
 
         si.n = si.sh_frame.n;
-        si.time = ray.time;
 
-        si_out[active] = si;
-    }
+        if (has_flag(flags, HitComputeFlags::dNSdUV)) {
+            ScalarFloat inv_radius = (m_flip_normals ? -1.f : 1.f) / m_radius;
+            si.dn_du = si.dp_du * inv_radius;
+            si.dn_dv = si.dp_dv * inv_radius;
+        }
 
-    std::pair<Vector3f, Vector3f> normal_derivative(const SurfaceInteraction3f &si,
-                                                    bool /*shading_frame*/,
-                                                    Mask active) const override {
-        MTS_MASK_ARGUMENT(active);
-
-        ScalarFloat inv_radius = (m_flip_normals ? -1.f : 1.f) / m_radius;
-        return { si.dp_du * inv_radius, si.dp_dv * inv_radius };
+        return si;
     }
 
     //! @}
     // =============================================================
 
-    ScalarSize primitive_count() const override { return 1; }
-
-    ScalarSize effective_primitive_count() const override { return 1; }
-
     void traverse(TraversalCallback *callback) override {
-        callback->put_parameter("center", m_center);
-        callback->put_parameter("radius", m_radius);
         Base::traverse(callback);
     }
 
-    void parameters_changed() override {
+    void parameters_changed(const std::vector<std::string> &/*keys*/) override {
+        update();
         Base::parameters_changed();
-        m_object_to_world = ScalarTransform4f::translate(m_center);
-        m_world_to_object = m_object_to_world.inverse();
-        m_inv_surface_area = 1.f / surface_area();
+#if defined(MTS_ENABLE_OPTIX)
+        optix_prepare_geometry();
+#endif
     }
 
-#if defined(MTS_ENABLE_EMBREE)
-    RTCGeometry embree_geometry(RTCDevice device) const override {
-        RTCGeometry geom = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_SPHERE_POINT);
-        float *buffer = (float*) rtcSetNewGeometryBuffer(geom, RTC_BUFFER_TYPE_VERTEX, 0,
-                                                         RTC_FORMAT_FLOAT4, 4 * sizeof(float), 1);
-        buffer[0] = m_center.x(); buffer[1] = m_center.y(); buffer[2] = m_center.z();
-        buffer[3] = m_radius;
-        rtcCommitGeometry(geom);
-        return geom;
+#if defined(MTS_ENABLE_OPTIX)
+    using Base::m_optix_data_ptr;
+
+    void optix_prepare_geometry() override {
+        if constexpr (is_cuda_array_v<Float>) {
+            if (!m_optix_data_ptr)
+                m_optix_data_ptr = cuda_malloc(sizeof(OptixSphereData));
+
+            OptixSphereData data = { bbox(), m_to_world, m_to_object,
+                                     m_center, m_radius, m_flip_normals };
+
+            cuda_memcpy_to_device(m_optix_data_ptr, &data, sizeof(OptixSphereData));
+        }
     }
 #endif
 
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "Sphere[" << std::endl
+            << "  to_world = " << string::indent(m_to_world, 13) << "," << std::endl
+            << "  center = "  << m_center << "," << std::endl
             << "  radius = "  << m_radius << "," << std::endl
-            << "  center = "  << m_center << std::endl
+            << "  surface_area = " << surface_area() << "," << std::endl
+            << "  " << string::indent(get_children_string()) << std::endl
             << "]";
         return oss.str();
     }
 
     MTS_DECLARE_CLASS()
 private:
-    ScalarTransform4f m_object_to_world;
-    ScalarTransform4f m_world_to_object;
+    /// Center in world-space
     ScalarPoint3f m_center;
+    /// Radius in world-space
     ScalarFloat m_radius;
+
     ScalarFloat m_inv_surface_area;
+
     bool m_flip_normals;
 };
 

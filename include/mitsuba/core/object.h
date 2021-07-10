@@ -82,11 +82,18 @@ public:
      * internal state so that derived quantities are consistent with the
      * change.
      *
+     * \param keys
+     *     Optional list of names (obtained via \ref traverse) corresponding
+     *     to the attributes that have been modified. Can also be used to
+     *     notify when this function is called from a parent object by adding
+     *     a "parent" key to the list. When empty, the object should assume
+     *     that any attribute might have changed.
+     *
      * \remark The default implementation does nothing.
      *
      * \sa TraversalCallback
      */
-    virtual void parameters_changed();
+    virtual void parameters_changed(const std::vector<std::string> &/*keys*/ = {});
 
     /**
      * \brief Return a \ref Class instance containing run-time type information
@@ -143,6 +150,14 @@ public:
     ref(T *ptr) : m_ptr(ptr) {
         static_assert(std::is_base_of_v<Object, T2>,
                       "Cannot create reference to object not inheriting from Object class.");
+        if (m_ptr)
+            ((Object *) m_ptr)->inc_ref();
+    }
+
+    /// Construct a reference from another convertible reference
+    template <typename T2>
+    ref(const ref<T2> &r) : m_ptr((T2 *) r.get()) {
+        static_assert(std::is_convertible_v<T2*, T*>, "Cannot create reference to object from another unconvertible reference.");
         if (m_ptr)
             ((Object *) m_ptr)->inc_ref();
     }

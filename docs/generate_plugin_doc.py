@@ -13,7 +13,9 @@ SHAPE_ORDERING = ['obj',
                   'sphere',
                   'cylinder',
                   'disk',
-                  'rectangle']
+                  'rectangle',
+                  'shapegroup',
+                  'instance']
 
 BSDF_ORDERING = ['diffuse',
                  'dielectric',
@@ -24,14 +26,24 @@ BSDF_ORDERING = ['diffuse',
                  'plastic',
                  'roughplastic',
                  'measured',
+                 'bumpmap',
+                 'normalmap',
                  'blendbsdf',
                  'mask',
-                 'twosided']
+                 'twosided',
+                 'null',
+                 'polarizer',
+                 'retarder',
+                 'circular',
+                 'measured_polarized',
+                 'pplastic']
 
 EMITTER_ORDERING = ['area',
                     'point',
                     'constant',
-                    'envmap']
+                    'envmap',
+                    'spot',
+                    'projector']
 
 SENSOR_ORDERING = ['perspective',
                    'thinlens']
@@ -47,7 +59,11 @@ SPECTRUM_ORDERING = ['uniform',
                      'srgb_d65',
                      'blackbody']
 
-SAMPLER_ORDERING = ['independent']
+SAMPLER_ORDERING = ['independent',
+                    'stratified',
+                    'multijitter',
+                    'orthogonal',
+                    'ldsampler']
 
 INTEGRATOR_ORDERING = ['direct',
                        'path',

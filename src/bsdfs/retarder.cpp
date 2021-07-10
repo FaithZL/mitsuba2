@@ -21,6 +21,9 @@ Linear retarder material (:monosp:`retarder`)
  * - delta
    - |spectrum| or |texture|
    - Specifies the retardance (in degrees) where 360 degrees is equivalent to a full wavelength. (Default: 90.0)
+ * - transmittance
+   - |spectrum| or |texture|
+   - Optional factor that can be used to modulate the specular transmission. (Default: 1.0)
 
 This material simulates an ideal linear retarder useful to test polarization aware
 light transport or to conduct virtual optical experiments. The fast axis of the
@@ -59,6 +62,7 @@ public:
         m_theta = props.texture<Texture>("theta", 0.f);
         // As default, instantiate as a quarter-wave plate
         m_delta = props.texture<Texture>("delta", 90.f);
+        m_transmittance = props.texture<Texture>("transmittance", 1.f);
 
         m_flags = BSDFFlags::FrontSide | BSDFFlags::BackSide | BSDFFlags::Null;
         m_components.push_back(m_flags);
@@ -76,6 +80,8 @@ public:
         bs.sampled_type = +BSDFFlags::Null;
         bs.sampled_component = 0;
 
+        UnpolarizedSpectrum transmittance = m_transmittance->eval(si, active);
+
         if constexpr (is_polarized_v<Spectrum>) {
             // Query rotation angle
             UnpolarizedSpectrum theta = deg_to_rad(m_theta->eval(si, active));
@@ -92,16 +98,22 @@ public:
             // Rotate optical element by specified angle
             M = mueller::rotated_element(theta, M);
 
-            // Forward direction is always away from light source.
+            /* The `forward` direction here is always along the direction that
+               light travels. This is needed for the coordinate system rotation
+               below. */
             Vector3f forward = ctx.mode == TransportMode::Radiance ? si.wi : -si.wi;
 
             // Rotate in/out basis of M s.t. it aligns with BSDF coordinate frame
             M = mueller::rotate_mueller_basis_collinear(M, forward,
                                                         Vector3f(1.f, 0.f, 0.f),
                                                         mueller::stokes_basis(forward));
+
+            // Handle potential absorption if transmittance < 1.0
+            M *= mueller::absorber(transmittance);
+
             return { bs, M };
         } else {
-            return { bs, 1.f };
+            return { bs, transmittance };
         }
     }
 
@@ -118,6 +130,8 @@ public:
     Spectrum eval_null_transmission(const SurfaceInteraction3f &si, Mask active) const override {
         MTS_MASKED_FUNCTION(ProfilerPhase::BSDFEvaluate, active);
 
+        UnpolarizedSpectrum transmittance = m_transmittance->eval(si, active);
+
         if constexpr (is_polarized_v<Spectrum>) {
             // Query rotation angle
             UnpolarizedSpectrum theta = deg_to_rad(m_theta->eval(si, active));
@@ -134,22 +148,29 @@ public:
             // Rotate optical element by specified angle
             M = mueller::rotated_element(theta, M);
 
-            // Forward direction is always away from light source.
-            Vector3f forward = si.wi;   // Note: when tracing Importance, this should be reversed.
+            /* The `forward` direction here is always along the direction that
+               light travels. This is needed for the coordinate system rotation
+               below. */
+            Vector3f forward = si.wi;   // Note: Should be reversed for TransportMode::Importance.
 
             // Rotate in/out basis of M s.t. it aligns with BSDF coordinate frame
             M = mueller::rotate_mueller_basis_collinear(M, forward,
                                                         Vector3f(1.f, 0.f, 0.f),
                                                         mueller::stokes_basis(forward));
+
+            // Handle potential absorption if transmittance < 1.0
+            M *= mueller::absorber(transmittance);
+
             return M;
         } else {
-            return 1.f;
+            return transmittance;
         }
     }
 
     void traverse(TraversalCallback *callback) override {
         callback->put_object("theta", m_theta.get());
         callback->put_object("delta", m_delta.get());
+        callback->put_object("transmittance", m_transmittance.get());
     }
 
     std::string to_string() const override {
@@ -157,6 +178,7 @@ public:
         oss << "LinearPolarizer[" << std::endl
             << "  theta = " << string::indent(m_theta) << std::endl
             << "  delta = " << string::indent(m_delta) << std::endl
+            << "  transmittance = " << string::indent(m_transmittance) << std::endl
             << "]";
         return oss.str();
     }
@@ -165,6 +187,7 @@ public:
 private:
     ref<Texture> m_theta;
     ref<Texture> m_delta;
+    ref<Texture> m_transmittance;
 };
 
 MTS_IMPLEMENT_CLASS_VARIANT(LinearRetarder, BSDF)

@@ -1,5 +1,5 @@
-#include <mitsuba/python/python.h>
 #include <mitsuba/render/mueller.h>
+#include <mitsuba/python/python.h>
 
 MTS_PY_EXPORT(mueller) {
     MTS_PY_IMPORT_TYPES()
@@ -38,11 +38,6 @@ MTS_PY_EXPORT(mueller) {
           "theta"_a, "M"_a, D(mueller, rotated_element));
     m.def("rotated_element", &mueller::rotated_element<UnpolarizedSpectrum>,
           "theta"_a, "M"_a, D(mueller, rotated_element));
-
-    m.def("reverse", &mueller::reverse<Float>,
-          "M"_a, D(mueller, reverse));
-    m.def("reverse", &mueller::reverse<UnpolarizedSpectrum>,
-          "M"_a, D(mueller, reverse));
 
     m.def("specular_reflection", &mueller::specular_reflection<Float, Complex<Float>>,
           "cos_theta_i"_a, "eta"_a, D(mueller, specular_reflection));

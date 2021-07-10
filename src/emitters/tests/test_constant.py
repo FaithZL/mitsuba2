@@ -62,7 +62,7 @@ def test02_sample_ray(variant_packet_spectral, spectrum_key):
 
     # Sample wavelengths on the spectrum
     it = SurfaceInteraction3f.zero(3)
-    wav, spec = spectrum.sample(it, sample_shifted(wavelength_sample))
+    wav, spec = spectrum.sample_spectrum(it, sample_shifted(wavelength_sample))
 
     assert ek.allclose(res, spec * 4 * ek.pi * ek.pi)
     assert ek.allclose(ray.time, time)
@@ -95,6 +95,6 @@ def test03_sample_direction(variant_packet_spectral):
     assert ek.allclose(emitter.pdf_direction(it, ds), InvFourPi)
     assert ek.allclose(ds.time, it.time)
 
-    # Evalutate the spectrum (divide by the pdf)
+    # Evaluate the spectrum (divide by the pdf)
     spec = spectrum.eval(it) / warp.square_to_uniform_sphere_pdf(ds.d)
     assert ek.allclose(res, spec)

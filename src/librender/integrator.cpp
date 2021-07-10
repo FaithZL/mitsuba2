@@ -15,7 +15,6 @@
 #include <mitsuba/render/spiral.h>
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
-#include <mutex>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -23,16 +22,20 @@ NAMESPACE_BEGIN(mitsuba)
 
 MTS_VARIANT SamplingIntegrator<Float, Spectrum>::SamplingIntegrator(const Properties &props)
     : Base(props) {
-    m_block_size = (uint32_t) props.size_("block_size", MTS_BLOCK_SIZE);
+
+    m_block_size = (uint32_t) props.size_("block_size", 0);
     uint32_t block_size = math::round_to_power_of_two(m_block_size);
-    if (block_size != m_block_size) {
+    if (m_block_size > 0 && block_size != m_block_size) {
+        Log(Warn, "Setting block size from %i to next higher power of two: %i", m_block_size,
+            block_size);
         m_block_size = block_size;
-        Log(Warn, "Setting block size from %i to next higher power of two: %i", block_size,
-            m_block_size);
     }
 
     m_samples_per_pass = (uint32_t) props.size_("samples_per_pass", (size_t) -1);
     m_timeout = props.float_("timeout", -1.f);
+
+    /// Disable direct visibility of emitters if needed
+    m_hide_emitters = props.bool_("hide_emitters", false);
 }
 
 MTS_VARIANT SamplingIntegrator<Float, Spectrum>::~SamplingIntegrator() { }
@@ -59,7 +62,7 @@ MTS_VARIANT bool SamplingIntegrator<Float, Spectrum>::render(Scene *scene, Senso
         Throw("sample_count (%d) must be a multiple of samples_per_pass (%d).",
               total_spp, samples_per_pass);
 
-    size_t n_passes = ceil(total_spp / (ScalarFloat) samples_per_pass);
+    size_t n_passes = (total_spp + samples_per_pass - 1) / samples_per_pass;
 
     std::vector<std::string> channels = aov_names();
     bool has_aovs = !channels.empty();
@@ -69,6 +72,7 @@ MTS_VARIANT bool SamplingIntegrator<Float, Spectrum>::render(Scene *scene, Senso
         channels.insert(channels.begin() + i, std::string(1, "XYZAW"[i]));
     film->prepare(channels);
 
+    m_render_timer.reset();
     if constexpr (!is_cuda_array_v<Float>) {
         /// Render on the CPU using a spiral pattern
         size_t n_threads = __global_thread_count;
@@ -81,6 +85,17 @@ MTS_VARIANT bool SamplingIntegrator<Float, Spectrum>::render(Scene *scene, Senso
         if (m_timeout > 0.f)
             Log(Info, "Timeout specified: %.2f seconds.", m_timeout);
 
+        // Find a good block size to use for splitting up the total workload.
+        if (m_block_size == 0) {
+            uint32_t block_size = MTS_BLOCK_SIZE;
+            while (true) {
+                if (block_size == 1 || hprod((film_size + block_size - 1) / block_size) >= n_threads)
+                    break;
+                block_size /= 2;
+            }
+            m_block_size = block_size;
+        }
+
         Spiral spiral(film, m_block_size, n_passes);
 
         ThreadEnvironment env;
@@ -91,7 +106,6 @@ MTS_VARIANT bool SamplingIntegrator<Float, Spectrum>::render(Scene *scene, Senso
         size_t total_blocks = spiral.block_count() * n_passes,
                blocks_done = 0;
 
-        m_render_timer.reset();
         tbb::parallel_for(
             tbb::blocked_range<size_t>(0, total_blocks, 1),
             [&](const tbb::blocked_range<size_t> &range) {
@@ -110,11 +124,8 @@ MTS_VARIANT bool SamplingIntegrator<Float, Spectrum>::render(Scene *scene, Senso
                     block->set_size(size);
                     block->set_offset(offset);
 
-                    // Ensure that the sample generation is fully deterministic
-                    sampler->seed(block_id);
-
                     render_block(scene, sensor, sampler, block,
-                                 aovs.get(), samples_per_pass);
+                                 aovs.get(), samples_per_pass, block_id);
 
                     film->put(block);
 
@@ -127,14 +138,17 @@ MTS_VARIANT bool SamplingIntegrator<Float, Spectrum>::render(Scene *scene, Senso
             }
         );
     } else {
+        Log(Info, "Start rendering...");
+
         ref<Sampler> sampler = sensor->sampler();
+        sampler->set_samples_per_wavefront((uint32_t) samples_per_pass);
 
         ScalarFloat diff_scale_factor = rsqrt((ScalarFloat) sampler->sample_count());
-        ScalarUInt32 total_sample_count = hprod(film_size) * (uint32_t) samples_per_pass;
-        if (sampler->wavefront_size() != total_sample_count)
-            sampler->seed(arange<UInt64>(total_sample_count));
+        ScalarUInt32 wavefront_size = hprod(film_size) * (uint32_t) samples_per_pass;
+        if (sampler->wavefront_size() != wavefront_size)
+            sampler->seed(0, wavefront_size);
 
-        UInt32 idx = arange<UInt32>(total_sample_count);
+        UInt32 idx = arange<UInt32>(wavefront_size);
         if (samples_per_pass != 1)
             idx /= (uint32_t) samples_per_pass;
 
@@ -142,8 +156,12 @@ MTS_VARIANT bool SamplingIntegrator<Float, Spectrum>::render(Scene *scene, Senso
                                                film->reconstruction_filter(),
                                                !has_aovs);
         block->clear();
+        block->set_offset(sensor->film()->crop_offset());
+
         Vector2f pos = Vector2f(Float(idx % uint32_t(film_size[0])),
                                 Float(idx / uint32_t(film_size[0])));
+        pos += block->offset();
+
         std::vector<Float> aovs(channels.size());
 
         for (size_t i = 0; i < n_passes; i++)
@@ -165,7 +183,8 @@ MTS_VARIANT void SamplingIntegrator<Float, Spectrum>::render_block(const Scene *
                                                                    Sampler *sampler,
                                                                    ImageBlock *block,
                                                                    Float *aovs,
-                                                                   size_t sample_count_) const {
+                                                                   size_t sample_count_,
+                                                                   size_t block_id) const {
     block->clear();
     uint32_t pixel_count  = (uint32_t)(m_block_size * m_block_size),
              sample_count = (uint32_t)(sample_count_ == (size_t) -1
@@ -176,6 +195,8 @@ MTS_VARIANT void SamplingIntegrator<Float, Spectrum>::render_block(const Scene *
 
     if constexpr (!is_array_v<Float>) {
         for (uint32_t i = 0; i < pixel_count && !should_stop(); ++i) {
+            sampler->seed(block_id * pixel_count + i);
+
             ScalarPoint2u pos = enoki::morton_decode<ScalarPoint2u>(i);
             if (any(pos >= block->size()))
                 continue;
@@ -187,6 +208,9 @@ MTS_VARIANT void SamplingIntegrator<Float, Spectrum>::render_block(const Scene *
             }
         }
     } else if constexpr (is_array_v<Float> && !is_cuda_array_v<Float>) {
+        // Ensure that the sample generation is fully deterministic
+        sampler->seed(block_id);
+
         for (auto [index, active] : range<UInt32>(pixel_count * sample_count)) {
             if (should_stop())
                 break;
@@ -206,9 +230,15 @@ MTS_VARIANT void SamplingIntegrator<Float, Spectrum>::render_block(const Scene *
     }
 }
 
-MTS_VARIANT void SamplingIntegrator<Float, Spectrum>::render_sample(
-    const Scene *scene, const Sensor *sensor, Sampler *sampler, ImageBlock *block,
-    Float *aovs, const Vector2f &pos, ScalarFloat diff_scale_factor, Mask active) const {
+MTS_VARIANT void
+SamplingIntegrator<Float, Spectrum>::render_sample(const Scene *scene,
+                                                   const Sensor *sensor,
+                                                   Sampler *sampler,
+                                                   ImageBlock *block,
+                                                   Float *aovs,
+                                                   const Vector2f &pos,
+                                                   ScalarFloat diff_scale_factor,
+                                                   Mask active) const {
     Vector2f position_sample = pos + sampler->next_2d(active);
 
     Point2f aperture_sample(.5f);
@@ -230,7 +260,8 @@ MTS_VARIANT void SamplingIntegrator<Float, Spectrum>::render_sample(
 
     ray.scale_differential(diff_scale_factor);
 
-    std::pair<Spectrum, Mask> result = sample(scene, sampler, ray, aovs + 5, active);
+    const Medium *medium = sensor->medium();
+    std::pair<Spectrum, Mask> result = sample(scene, sampler, ray, medium, aovs + 5, active);
     result.first = ray_weight * result.first;
 
     UnpolarizedSpectrum spec_u = depolarize(result.first);
@@ -252,12 +283,15 @@ MTS_VARIANT void SamplingIntegrator<Float, Spectrum>::render_sample(
     aovs[4] = 1.f;
 
     block->put(position_sample, aovs, active);
+
+    sampler->advance();
 }
 
 MTS_VARIANT std::pair<Spectrum, typename SamplingIntegrator<Float, Spectrum>::Mask>
 SamplingIntegrator<Float, Spectrum>::sample(const Scene * /* scene */,
                                             Sampler * /* sampler */,
                                             const RayDifferential3f & /* ray */,
+                                            const Medium * /* medium */,
                                             Float * /* aovs */,
                                             Mask /* active */) const {
     NotImplementedError("sample");
@@ -278,9 +312,6 @@ MTS_VARIANT MonteCarloIntegrator<Float, Spectrum>::MonteCarloIntegrator(const Pr
     m_max_depth = props.int_("max_depth", -1);
     if (m_max_depth < 0 && m_max_depth != -1)
         Throw("\"max_depth\" must be set to -1 (infinite) or a value >= 0");
-
-    /// Disable direct visibility of emitters if needed
-    m_hide_emitters = props.bool_("hide_emitters", false);
 }
 
 MTS_VARIANT MonteCarloIntegrator<Float, Spectrum>::~MonteCarloIntegrator() { }

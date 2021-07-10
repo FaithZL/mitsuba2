@@ -2,6 +2,7 @@ import enoki as ek
 import pytest
 import mitsuba
 
+from mitsuba.python.test.util import fresolver_append_path
 
 def test01_invalid_xml(variant_scalar_rgb):
     from mitsuba.core import xml
@@ -278,3 +279,84 @@ def test19_invalid_vector(variant_scalar_rgb):
                    <vector name="10" value="1, 2, 3" x="4"/>
                    </scene>""")
     e.match(err_str3)
+
+
+def test20_upgrade_tree(variant_scalar_rgb):
+    from mitsuba.core import xml
+
+    err_str = 'unreferenced property'
+    with pytest.raises(Exception) as e:
+        xml.load_string("""<scene version="2.0.0">
+                            <bsdf type="dielectric">
+                                <float name="intIOR" value="1.33"/>
+                            </bsdf>
+                        </scene>""")
+    e.match(err_str)
+
+    xml.load_string("""<scene version="0.1.0">
+                           <bsdf type="dielectric">
+                               <float name="intIOR" value="1.33"/>
+                           </bsdf>
+                       </scene>""")
+
+
+def test21_path_at_root_only(variant_scalar_rgb):
+    from mitsuba.core import xml
+
+    err_str = 'can only be child of root'
+    with pytest.raises(Exception) as e:
+        xml.load_string("""<scene version="2.0.0">
+                            <bsdf type="dielectric">
+                                <path value="/tmp"/>
+                            </bsdf>
+                        </scene>""")
+    e.match(err_str)
+
+
+def test22_fileresolver_unchanged(variant_scalar_rgb):
+    from mitsuba.core import xml, Thread
+
+    fs_backup = Thread.thread().file_resolver()
+
+    xml.load_string("""<scene version="2.0.0">
+                            <path value="../"/>
+                        </scene>""")
+
+    assert fs_backup == Thread.thread().file_resolver()
+
+
+def test23_unreferenced_object(variant_scalar_rgb):
+    from mitsuba.core import xml
+
+    plugins = [('bsdf', 'diffuse'), ('emitter', 'point'),
+               ('shape', 'sphere'), ('sensor', 'perspective')]
+
+    for interface, name in plugins:
+        with pytest.raises(Exception) as e:
+            xml.load_string("""<{interface} version="2.0.0" type="{name}">
+                                    <rgb name="aaa" value="0.5"/>
+                                </{interface}>""".format(interface=interface, name=name))
+        e.match("unreferenced object")
+
+
+def test24_properties_duplicated(variant_scalar_rgb):
+    from mitsuba.core import xml
+
+    err_str = 'was specified multiple times'
+    with pytest.raises(Exception) as e:
+        xml.load_string("""<scene version="2.0.0">
+                            <sampler type="independent">
+                                <integer name="sample_count" value="16"/>
+                                <integer name="sample_count" value="32"/>
+                            </sampler>
+                        </scene>""")
+    e.match(err_str)
+
+    with pytest.raises(Exception) as e:
+        xml.load_string("""<scene version="2.0.0">
+                            <bsdf type="diffuse">
+                                <rgb name="reflectance" value="0.6"/>
+                                <rgb name="reflectance" value="0.44"/>
+                            </bsdf>
+                        </scene>""")
+    e.match(err_str)

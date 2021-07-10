@@ -58,12 +58,13 @@ public:
 
     BlendBSDF(const Properties &props) : Base(props) {
         int bsdf_index = 0;
-        for (auto &kv : props.objects()) {
-            auto *bsdf = dynamic_cast<Base *>(kv.second.get());
+        for (auto &[name, obj] : props.objects(false)) {
+            auto *bsdf = dynamic_cast<Base *>(obj.get());
             if (bsdf) {
                 if (bsdf_index == 2)
                     Throw("BlendBSDF: Cannot specify more than two child BSDFs");
                 m_nested_bsdf[bsdf_index++] = bsdf;
+                props.mark_queried(name);
             }
         }
 
@@ -71,10 +72,6 @@ public:
         if (bsdf_index != 2)
             Throw("BlendBSDF: Two child BSDFs must be specified!");
 
-        parameters_changed();
-    }
-
-    void parameters_changed() override {
         m_components.clear();
         for (size_t i = 0; i < 2; ++i)
             for (size_t j = 0; j < m_nested_bsdf[i]->component_count(); ++j)
@@ -175,9 +172,9 @@ public:
     std::string to_string() const override {
         std::ostringstream oss;
         oss << "BlendBSDF[" << std::endl
-            << "  weight = " << string::indent(m_weight->to_string()) << "," << std::endl
-            << "  nested_bsdf[0] = " << string::indent(m_nested_bsdf[0]->to_string()) << "," << std::endl
-            << "  nested_bsdf[1] = " << string::indent(m_nested_bsdf[1]->to_string()) << std::endl
+            << "  weight = " << string::indent(m_weight) << "," << std::endl
+            << "  nested_bsdf[0] = " << string::indent(m_nested_bsdf[0]) << "," << std::endl
+            << "  nested_bsdf[1] = " << string::indent(m_nested_bsdf[1]) << std::endl
             << "]";
         return oss.str();
     }

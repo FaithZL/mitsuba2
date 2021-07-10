@@ -32,13 +32,13 @@ To fetch all dependencies and Clang, enter the following commands on Ubuntu:
 .. code-block:: bash
 
     # Install recent versions build tools, including Clang and libc++ (Clang's C++ library)
-    sudo apt install clang-9 libc++-9-dev libc++abi-9-dev cmake ninja-build
+    sudo apt install -y clang-9 libc++-9-dev libc++abi-9-dev cmake ninja-build
 
     # Install libraries for image I/O and the graphical user interface
-    sudo apt install libz-dev libpng-dev libjpeg-dev libxrandr-dev libxinerama-dev libxcursor-dev
+    sudo apt install -y libz-dev libpng-dev libjpeg-dev libxrandr-dev libxinerama-dev libxcursor-dev
 
     # Install required Python packages
-    sudo apt install python3-dev python3-distutils python3-setuptools
+    sudo apt install -y python3-dev python3-distutils python3-setuptools
 
 Additional packages are required to run the included test suite or to generate HTML
 documentation (see :ref:`Developer guide <sec-devguide>`). If those are interesting to you, also
@@ -47,10 +47,10 @@ enter the following commands:
 .. code-block:: bash
 
     # For running tests
-    sudo apt install python3-pytest python3-pytest-xdist python3-numpy
+    sudo apt install -y python3-pytest python3-pytest-xdist python3-numpy
 
     # For generating the documentation
-    sudo apt install python3-sphinx python3-guzzle-sphinx-theme python3-sphinxcontrib.bibtex
+    sudo apt install -y python3-sphinx python3-guzzle-sphinx-theme python3-sphinxcontrib.bibtex
 
 Next, ensure that two environment variables :monosp:`CC` and
 :monosp:`CXX` are exported. You can either run these two commands manually
@@ -197,10 +197,11 @@ GPU variants
 Variants of Mitsuba that run on the GPU (e.g. :monosp:`gpu_rgb`,
 :monosp:`gpu_autodiff_spectral`, etc.) additionally depend on the `NVIDIA CUDA
 Toolkit <https://developer.nvidia.com/cuda-downloads>`_ and `NVIDIA OptiX
-<https://developer.nvidia.com/designworks/optix/download>`_ that both need to
-be installed manually. Tested versions of CUDA include 10.0, 10.1, and 10.2.
-Only OptiX 6.5 is supported at this moment (in particular, compilation fails
-when OptiX 7 is installed).
+<https://developer.nvidia.com/designworks/optix/download>`_. CUDA needs to be installed
+manually while OptiX 7 ships natively with the latest GPU driver. Make sure to have an
+up-to-date GPU driver if the framework fails to compile the GPU variants of Mitsuba.
+
+Tested versions of CUDA include 10.0, 10.1, and 10.2. Only OptiX 7 is supported at this moment.
 
 .. warning::
 
@@ -225,20 +226,11 @@ compiler. E.g.
     # As part of the CMake process
     cmake .. -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
 
+By default, Mitsuba is able to resolve the OptiX API itself, and therefore does not rely on
+the ``optix.h`` header file. The ``MTS_USE_OPTIX_HEADERS`` CMake flag can be used to turn off
+this feature if a developer wants to experiment with parts of the OptiX API not yet exposed
+to the framework.
 
-Similarly, if OptiX is not automatically detected, its location can be specified
-during the CMake process with the `MTS_OPTIX_PATH` cache entry:
-
-
-.. code-block:: bash
-
-    cmake .. -DMTS_OPTIX_PATH=/opt/optix
-
-
-.. warning::
-
-    On Windows, it is necessary to add `C:/path/to/optix/bin64` to the `PATH` environment
-    variable.
 
 Embree
 ------
@@ -248,5 +240,4 @@ library for ray tracing instead of the builtin kd-tree in Mitsuba 2. To do so,
 invoke CMake with the ``-DMTS_ENABLE_EMBREE=1`` parameter or use a visual CMake
 tool like ``cmake-gui`` or ``ccmake`` to flip the value of this parameter.
 Embree tends to be faster but lacks some features such as support for double
-precision ray intersection. Currently, only triangle meshes are supported by
-Mitsuba's Embree integration, though this is likely to be fixed in the future.
+precision ray intersection.

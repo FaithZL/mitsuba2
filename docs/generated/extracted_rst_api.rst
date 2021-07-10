@@ -280,6 +280,22 @@
         Parameter ``format`` (:py:obj:`mitsuba.core.Bitmap.FileFormat`):
             *no description available*
 
+    .. py:class:: mitsuba.core.Bitmap.AlphaTransform
+
+        Members:
+
+            None : No transformation (default)
+
+            Premultiply : No transformation (default)
+
+            Unpremultiply : No transformation (default)
+
+        .. py:method:: __init__(self, arg0)
+
+            Parameter ``arg0`` (int):
+                *no description available*
+
+
     .. py:class:: mitsuba.core.Bitmap.FileFormat
 
         Supported image file formats
@@ -536,7 +552,7 @@
     .. py:method:: mitsuba.core.Bitmap.convert(overloaded)
 
 
-        .. py:method:: convert(self, pixel_format, component_format, srgb_gamma)
+        .. py:method:: convert(self, pixel_format, component_format, srgb_gamma, alpha_transform=AlphaTransform.None)
 
             Convert the bitmap into another pixel and/or component format
 
@@ -589,6 +605,9 @@
             Parameter ``srgb_gamma`` (bool):
                 *no description available*
 
+            Parameter ``alpha_transform`` (:py:obj:`mitsuba.core.Bitmap.AlphaTransform`):
+                *no description available*
+
             Returns → :py:obj:`mitsuba.core.Bitmap`:
                 *no description available*
 
@@ -625,7 +644,7 @@
 
         Return a Properties object containing the image metadata
 
-        Returns → :py:obj:`mitsuba.core.Properties`:
+        Returns → mitsuba::Properties:
             *no description available*
 
     .. py:method:: mitsuba.core.Bitmap.pixel_count(self)
@@ -640,6 +659,13 @@
         Return the pixel format of this bitmap
 
         Returns → :py:obj:`mitsuba.core.Bitmap.PixelFormat`:
+            *no description available*
+
+    .. py:method:: mitsuba.core.Bitmap.premultiplied_alpha(self)
+
+        Return whether the bitmap uses premultiplied alpha
+
+        Returns → bool:
             *no description available*
 
     .. py:method:: mitsuba.core.Bitmap.resample(overloaded)
@@ -716,6 +742,16 @@
 
             Returns → :py:obj:`mitsuba.core.Bitmap`:
                 *no description available*
+
+    .. py:method:: mitsuba.core.Bitmap.set_premultiplied_alpha(self, arg0)
+
+        Specify whether the bitmap uses premultiplied alpha
+
+        Parameter ``arg0`` (bool):
+            *no description available*
+
+        Returns → None:
+            *no description available*
 
     .. py:method:: mitsuba.core.Bitmap.set_srgb_gamma(self, arg0)
 
@@ -837,7 +873,8 @@
 
     .. py:method:: mitsuba.core.Bitmap.write_async(self, path, format=FileFormat.Auto, quality=-1)
 
-        Equivalent to \ref write(), but executes asynchronously on a different thread
+        Equivalent to write(), but executes asynchronously on a different
+        thread
 
         Parameter ``path`` (:py:obj:`mitsuba.core.filesystem.path`):
             *no description available*
@@ -1555,6 +1592,35 @@
     See also:
         ref, Object
 
+    .. py:method:: mitsuba.core.Class.alias(self)
+
+        Return the scene description-specific alias, if applicable
+
+        Returns → str:
+            *no description available*
+
+    .. py:method:: mitsuba.core.Class.name(self)
+
+        Return the name of the class
+
+        Returns → str:
+            *no description available*
+
+    .. py:method:: mitsuba.core.Class.parent(self)
+
+        Return the Class object associated with the parent class of nullptr if
+        it does not have one.
+
+        Returns → :py:obj:`mitsuba.core.Class`:
+            *no description available*
+
+    .. py:method:: mitsuba.core.Class.variant(self)
+
+        Return the variant of the class
+
+        Returns → str:
+            *no description available*
+
 .. py:class:: mitsuba.core.ContinuousDistribution
 
     Continuous 1D probability distribution defined in terms of a regularly
@@ -1746,7 +1812,7 @@
 
 .. py:data:: mitsuba.core.DEBUG
     :type: bool
-    :value: True
+    :value: False
 
 .. py:class:: mitsuba.core.DefaultFormatter
 
@@ -2037,6 +2103,41 @@
         Update the internal state. Must be invoked when changing the pmf.
 
         Returns → None:
+            *no description available*
+
+.. py:class:: mitsuba.core.DiscreteDistribution2D
+
+    .. py:method:: mitsuba.core.DiscreteDistribution2D.eval(self, pos, active=True)
+
+        Parameter ``pos`` (enoki.scalar.Vector2u):
+            *no description available*
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → float:
+            *no description available*
+
+    .. py:method:: mitsuba.core.DiscreteDistribution2D.pdf(self, pos, active=True)
+
+        Parameter ``pos`` (enoki.scalar.Vector2u):
+            *no description available*
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → float:
+            *no description available*
+
+    .. py:method:: mitsuba.core.DiscreteDistribution2D.sample(self, sample, active=True)
+
+        Parameter ``sample`` (enoki.scalar.Vector2f):
+            *no description available*
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → Tuple[enoki.scalar.Vector2u, float, enoki.scalar.Vector2f]:
             *no description available*
 
 .. py:class:: mitsuba.core.DummyStream
@@ -3327,7 +3428,7 @@
 
 .. py:data:: mitsuba.core.MTS_VERSION
     :type: str
-    :value: 2.0.0
+    :value: 2.1.0
 
 .. py:data:: mitsuba.core.MTS_VERSION_MAJOR
     :type: int
@@ -3335,7 +3436,7 @@
 
 .. py:data:: mitsuba.core.MTS_VERSION_MINOR
     :type: int
-    :value: 0
+    :value: 1
 
 .. py:data:: mitsuba.core.MTS_VERSION_PATCH
     :type: int
@@ -3343,7 +3444,7 @@
 
 .. py:data:: mitsuba.core.MTS_YEAR
     :type: str
-    :value: 2019
+    :value: 2020
 
 .. py:class:: mitsuba.core.MarginalContinuous2D0
 
@@ -3371,6 +3472,15 @@
     the distribution is discretized. Linear interpolation is used when
     sampling or evaluating the distribution for in-between parameter
     values.
+
+    There are two variants of ``Marginal2D:`` when ``Continuous=false``,
+    discrete marginal/conditional distributions are used to select a
+    bilinear bilinear patch, followed by a continuous sampling step that
+    chooses a specific position inside the patch. When
+    ``Continuous=true``, continuous marginal/conditional distributions are
+    used instead, and the second step is no longer needed. The latter
+    scheme requires more computation and memory accesses but produces an
+    overall smoother mapping.
 
     Remark:
         The Python API exposes explicitly instantiated versions of this
@@ -3488,6 +3598,15 @@
     sampling or evaluating the distribution for in-between parameter
     values.
 
+    There are two variants of ``Marginal2D:`` when ``Continuous=false``,
+    discrete marginal/conditional distributions are used to select a
+    bilinear bilinear patch, followed by a continuous sampling step that
+    chooses a specific position inside the patch. When
+    ``Continuous=true``, continuous marginal/conditional distributions are
+    used instead, and the second step is no longer needed. The latter
+    scheme requires more computation and memory accesses but produces an
+    overall smoother mapping.
+
     Remark:
         The Python API exposes explicitly instantiated versions of this
         class named ``MarginalDiscrete2D0`` to ``MarginalDiscrete2D3`` and
@@ -3603,6 +3722,15 @@
     the distribution is discretized. Linear interpolation is used when
     sampling or evaluating the distribution for in-between parameter
     values.
+
+    There are two variants of ``Marginal2D:`` when ``Continuous=false``,
+    discrete marginal/conditional distributions are used to select a
+    bilinear bilinear patch, followed by a continuous sampling step that
+    chooses a specific position inside the patch. When
+    ``Continuous=true``, continuous marginal/conditional distributions are
+    used instead, and the second step is no longer needed. The latter
+    scheme requires more computation and memory accesses but produces an
+    overall smoother mapping.
 
     Remark:
         The Python API exposes explicitly instantiated versions of this
@@ -3720,6 +3848,15 @@
     sampling or evaluating the distribution for in-between parameter
     values.
 
+    There are two variants of ``Marginal2D:`` when ``Continuous=false``,
+    discrete marginal/conditional distributions are used to select a
+    bilinear bilinear patch, followed by a continuous sampling step that
+    chooses a specific position inside the patch. When
+    ``Continuous=true``, continuous marginal/conditional distributions are
+    used instead, and the second step is no longer needed. The latter
+    scheme requires more computation and memory accesses but produces an
+    overall smoother mapping.
+
     Remark:
         The Python API exposes explicitly instantiated versions of this
         class named ``MarginalDiscrete2D0`` to ``MarginalDiscrete2D3`` and
@@ -3835,6 +3972,15 @@
     the distribution is discretized. Linear interpolation is used when
     sampling or evaluating the distribution for in-between parameter
     values.
+
+    There are two variants of ``Marginal2D:`` when ``Continuous=false``,
+    discrete marginal/conditional distributions are used to select a
+    bilinear bilinear patch, followed by a continuous sampling step that
+    chooses a specific position inside the patch. When
+    ``Continuous=true``, continuous marginal/conditional distributions are
+    used instead, and the second step is no longer needed. The latter
+    scheme requires more computation and memory accesses but produces an
+    overall smoother mapping.
 
     Remark:
         The Python API exposes explicitly instantiated versions of this
@@ -3952,6 +4098,15 @@
     sampling or evaluating the distribution for in-between parameter
     values.
 
+    There are two variants of ``Marginal2D:`` when ``Continuous=false``,
+    discrete marginal/conditional distributions are used to select a
+    bilinear bilinear patch, followed by a continuous sampling step that
+    chooses a specific position inside the patch. When
+    ``Continuous=true``, continuous marginal/conditional distributions are
+    used instead, and the second step is no longer needed. The latter
+    scheme requires more computation and memory accesses but produces an
+    overall smoother mapping.
+
     Remark:
         The Python API exposes explicitly instantiated versions of this
         class named ``MarginalDiscrete2D0`` to ``MarginalDiscrete2D3`` and
@@ -4068,6 +4223,15 @@
     sampling or evaluating the distribution for in-between parameter
     values.
 
+    There are two variants of ``Marginal2D:`` when ``Continuous=false``,
+    discrete marginal/conditional distributions are used to select a
+    bilinear bilinear patch, followed by a continuous sampling step that
+    chooses a specific position inside the patch. When
+    ``Continuous=true``, continuous marginal/conditional distributions are
+    used instead, and the second step is no longer needed. The latter
+    scheme requires more computation and memory accesses but produces an
+    overall smoother mapping.
+
     Remark:
         The Python API exposes explicitly instantiated versions of this
         class named ``MarginalDiscrete2D0`` to ``MarginalDiscrete2D3`` and
@@ -4183,6 +4347,15 @@
     the distribution is discretized. Linear interpolation is used when
     sampling or evaluating the distribution for in-between parameter
     values.
+
+    There are two variants of ``Marginal2D:`` when ``Continuous=false``,
+    discrete marginal/conditional distributions are used to select a
+    bilinear bilinear patch, followed by a continuous sampling step that
+    chooses a specific position inside the patch. When
+    ``Continuous=true``, continuous marginal/conditional distributions are
+    used instead, and the second step is no longer needed. The latter
+    scheme requires more computation and memory accesses but produces an
+    overall smoother mapping.
 
     Remark:
         The Python API exposes explicitly instantiated versions of this
@@ -4863,7 +5036,7 @@
         Returns → None:
             *no description available*
 
-    .. py:method:: mitsuba.core.Object.parameters_changed(self)
+    .. py:method:: mitsuba.core.Object.parameters_changed(self, keys=[])
 
         Update internal state after applying changes to parameters
 
@@ -4871,6 +5044,13 @@
         traverse) are modified in some way. The obect can then update its
         internal state so that derived quantities are consistent with the
         change.
+
+        Parameter ``keys`` (List[str]):
+            Optional list of names (obtained via traverse) corresponding to
+            the attributes that have been modified. Can also be used to notify
+            when this function is called from a parent object by adding a
+            "parent" key to the list. When empty, the object should assume
+            that any attribute might have changed.
 
         Remark:
             The default implementation does nothing.
@@ -5060,6 +5240,37 @@
             *no description available*
 
         Returns → None:
+            *no description available*
+
+.. py:class:: mitsuba.core.PluginManager
+
+    The object factory is responsible for loading plugin modules and
+    instantiating object instances.
+
+    Ordinarily, this class will be used by making repeated calls to the
+    create_object() methods. The generated instances are then assembled
+    into a final object graph, such as a scene. One such examples is the
+    SceneHandler class, which parses an XML scene file by essentially
+    translating the XML elements into calls to create_object().
+
+    .. py:method:: mitsuba.core.PluginManager.get_plugin_class(self, name, variant)
+
+        Return the class corresponding to a plugin for a specific variant
+
+        Parameter ``name`` (str):
+            *no description available*
+
+        Parameter ``variant`` (str):
+            *no description available*
+
+        Returns → :py:obj:`mitsuba.core.Class`:
+            *no description available*
+
+    .. py:method:: mitsuba.core.PluginManager.instance()
+
+        Return the global plugin manager
+
+        Returns → :py:obj:`mitsuba.core.PluginManager`:
             *no description available*
 
 .. py:class:: mitsuba.core.Properties
@@ -6331,6 +6542,14 @@
             In FieldConverter::convert, check that the field value matches the
             specified default value. Otherwise, return a failure
 
+        .. py:data:: Alpha
+
+            Specifies whether the field encodes an alpha value
+
+        .. py:data:: PremultipliedAlpha
+
+            Specifies whether the field encodes an alpha premultiplied value
+
         .. py:data:: Default
 
             In FieldConverter::convert, when the field is missing in the source
@@ -6732,6 +6951,17 @@
         Return the thread priority
 
         Returns → :py:obj:`mitsuba.core.Thread.EPriority`:
+            *no description available*
+
+    .. py:method:: mitsuba.core.Thread.register_external_thread(arg0)
+
+        Register a new thread (e.g. TBB, Python) with Mituba thread system.
+        Returns true upon success.
+
+        Parameter ``arg0`` (str):
+            *no description available*
+
+        Returns → bool:
             *no description available*
 
     .. py:method:: mitsuba.core.Thread.set_core_affinity(self, arg0)
@@ -8830,6 +9060,31 @@
     :type: bool
     :value: False
 
+.. py:function:: mitsuba.core.luminance(overloaded)
+
+
+    .. py:function:: luminance(value, wavelengths, active=True)
+
+        Parameter ``value`` (enoki.scalar.Vector3f):
+            *no description available*
+
+        Parameter ``wavelengths`` (enoki.scalar.Vector3f):
+            *no description available*
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → float:
+            *no description available*
+
+    .. py:function:: luminance(c)
+
+        Parameter ``c`` (enoki.scalar.Vector3f):
+            *no description available*
+
+        Returns → float:
+            *no description available*
+
 .. py:data:: mitsuba.core.math.E
     :type: float
     :value: 2.7182817459106445
@@ -9191,6 +9446,70 @@
         Returns → enoki.scalar.Vector3f:
             *no description available*
 
+.. py:function:: mitsuba.core.permute(value, sample_count, seed, rounds=4)
+
+    Generate pseudorandom permutation vector using a shuffling network and
+    the sample_tea function. This algorithm has a O(log2(sample_count))
+    complexity but only supports permutation vectors whose lengths are a
+    power of 2.
+
+    Parameter ``index``:
+        Input index to be mapped
+
+    Parameter ``sample_count`` (int):
+        Length of the permutation vector
+
+    Parameter ``seed`` (int):
+        Seed value used as second input to the Tiny Encryption Algorithm.
+        Can be used to generate different permutation vectors.
+
+    Parameter ``rounds`` (int):
+        How many rounds should be executed by the Tiny Encryption
+        Algorithm? The default is 2.
+
+    Parameter ``value`` (int):
+        *no description available*
+
+    Returns → int:
+        The index corresponding to the input index in the pseudorandom
+        permutation vector.
+
+.. py:function:: mitsuba.core.permute_kensler(i, l, p, active=True)
+
+    Generate pseudorandom permutation vector using the algorithm described
+    in Pixar's technical memo "Correlated Multi-Jittered Sampling":
+
+    https://graphics.pixar.com/library/MultiJitteredSampling/
+
+    Unlike permute, this function supports permutation vectors of any
+    length.
+
+    Parameter ``index``:
+        Input index to be mapped
+
+    Parameter ``sample_count``:
+        Length of the permutation vector
+
+    Parameter ``seed``:
+        Seed value used as second input to the Tiny Encryption Algorithm.
+        Can be used to generate different permutation vectors.
+
+    Parameter ``i`` (int):
+        *no description available*
+
+    Parameter ``l`` (int):
+        *no description available*
+
+    Parameter ``p`` (int):
+        *no description available*
+
+    Parameter ``active`` (bool):
+        Mask to specify active lanes.
+
+    Returns → int:
+        The index corresponding to the input index in the pseudorandom
+        permutation vector.
+
 .. py:function:: mitsuba.core.quad.composite_simpson(n)
 
     Computes the nodes and weights of a composite Simpson quadrature rule
@@ -9272,6 +9591,19 @@
         A tuple (nodes, weights) storing the nodes and weights of the
         quadrature rule.
 
+.. py:function:: mitsuba.core.radical_inverse_2(index, scramble)
+
+    Van der Corput radical inverse in base 2
+
+    Parameter ``index`` (int):
+        *no description available*
+
+    Parameter ``scramble`` (int):
+        *no description available*
+
+    Returns → float:
+        *no description available*
+
 .. py:function:: mitsuba.core.sample_rgb_spectrum(overloaded)
 
 
@@ -9306,6 +9638,28 @@
 
         Returns → Tuple[enoki.scalar.Vector3f, enoki.scalar.Vector3f]:
             *no description available*
+
+.. py:function:: mitsuba.core.sample_tea_32(v0, v1, rounds=4)
+
+    Generate fast and reasonably good pseudorandom numbers using the Tiny
+    Encryption Algorithm (TEA) by David Wheeler and Roger Needham.
+
+    For details, refer to "GPU Random Numbers via the Tiny Encryption
+    Algorithm" by Fahad Zafar, Marc Olano, and Aaron Curtis.
+
+    Parameter ``v0`` (int):
+        First input value to be encrypted (could be the sample index)
+
+    Parameter ``v1`` (int):
+        Second input value to be encrypted (e.g. the requested random
+        number dimension)
+
+    Parameter ``rounds`` (int):
+        How many rounds should be executed? The default for random number
+        generation is 4.
+
+    Returns → int:
+        A uniformly distributed 32-bit integer
 
 .. py:function:: mitsuba.core.sample_tea_float
 
@@ -9419,6 +9773,19 @@
         *no description available*
 
     Returns → None:
+        *no description available*
+
+.. py:function:: mitsuba.core.sobol_2(index, scramble)
+
+    Sobol' radical inverse in base 2
+
+    Parameter ``index`` (int):
+        *no description available*
+
+    Parameter ``scramble`` (int):
+        *no description available*
+
+    Returns → float:
         *no description available*
 
 .. py:function:: mitsuba.core.spline.eval_1d(overloaded)
@@ -10526,14 +10893,24 @@
     Returns → enoki.scalar.Vector2f:
         *no description available*
 
-.. py:function:: mitsuba.core.xml.load_file(path, parameters=[], update_scene=False)
+.. py:function:: mitsuba.core.xml.load_dict(dict)
+
+    Load a Mitsuba scene or object from an Python dictionary
+
+    Parameter ``dict`` (dict):
+        Python dictionary containing the object description
+
+    Returns → object:
+        *no description available*
+
+.. py:function:: mitsuba.core.xml.load_file(path, update_scene=False, **kwargs)
 
     Load a Mitsuba scene from an XML file
 
     Parameter ``path`` (str):
         Filename of the scene XML file
 
-    Parameter ``parameters`` (List[Tuple[str, str]]):
+    Parameter ``parameters``:
         Optional list of parameters that can be referenced as ``$varname``
         in the scene.
 
@@ -10548,14 +10925,11 @@
     Returns → object:
         *no description available*
 
-.. py:function:: mitsuba.core.xml.load_string(string, parameters=[])
+.. py:function:: mitsuba.core.xml.load_string(string)
 
     Load a Mitsuba scene from an XML string
 
-    Parameter ``string`` (str):
-        *no description available*
-
-    Parameter ``parameters`` (List[Tuple[str, str]]):
+    Parameter ``string`` (str, **kwargs):
         *no description available*
 
     Returns → object:
@@ -10603,7 +10977,7 @@
         :py:obj:`mitsuba.render.BSDFContext`
 
     See also:
-        :py:obj:`mitsuba.render.BSDFSample3`
+        :py:obj:`mitsuba.render.BSDFSample3f`
 
     .. py:method:: __init__(self, props)
 
@@ -11498,7 +11872,8 @@
 
     .. py:method:: mitsuba.render.Film.put(self, block)
 
-        Merge an image block into the film
+        Merge an image block into the film. This methods should be thread-
+        safe.
 
         Parameter ``block`` (:py:obj:`mitsuba.render.ImageBlock`):
             *no description available*
@@ -11543,6 +11918,57 @@
 
         Returns → enoki.scalar.Vector2i:
             *no description available*
+
+.. py:class:: mitsuba.render.HitComputeFlags
+
+    Members:
+
+    .. py:data:: None
+
+        No flags set
+
+    .. py:data:: Minimal
+
+        Compute position and geometric normal
+
+    .. py:data:: UV
+
+        Compute UV coordinates
+
+    .. py:data:: dPdUV
+
+        Compute position partials wrt. UV coordinates
+
+    .. py:data:: dNGdUV
+
+        Compute the geometric normal partials wrt. the UV coordinates
+
+    .. py:data:: dNSdUV
+
+        Compute the shading normal partials wrt. the UV coordinates
+
+    .. py:data:: ShadingFrame
+
+        Compute shading normal and shading frame
+
+    .. py:data:: NonDifferentiable
+
+        Force computed fields to not be be differentiable
+
+    .. py:data:: All
+
+        Compute all fields of the surface interaction data structure (default)
+
+    .. py:data:: AllNonDifferentiable
+
+        Compute all fields of the surface interaction data structure in a non
+        differentiable way
+
+    .. py:method:: __init__(self, arg0)
+
+        Parameter ``arg0`` (int):
+            *no description available*
+
 
 .. py:class:: mitsuba.render.ImageBlock
 
@@ -11983,28 +12409,65 @@
 
     Base class: :py:obj:`mitsuba.render.Shape`
 
+    __init__(self: :py:obj:`mitsuba.render.Mesh`, name: str, vertex_count: int, face_count: int, props: :py:obj:`mitsuba.core.Properties` = Properties[
+      plugin_name = "",
+      id = "",
+      elements = {
+      }
+    ]
+    , has_vertex_normals: bool = False, has_vertex_texcoords: bool = False) -> None
+
     Create a new mesh with the given vertex and face data structures
 
-    .. py:method:: mitsuba.render.Mesh.face_struct(self)
+    .. py:method:: mitsuba.render.Mesh.add_attribute(self, name, size, buffer)
 
-        Return a ``Struct`` instance describing the contents of the face
-        buffer
+        Add an attribute buffer with the given ``name`` and ``dim``
 
-        Returns → :py:obj:`mitsuba.core.Struct`:
+        Parameter ``name`` (str):
             *no description available*
 
-    .. py:method:: mitsuba.render.Mesh.faces(self)
-
-        Const variant of faces.
-
-        Returns → array:
+        Parameter ``size`` (int):
             *no description available*
 
-    .. py:method:: mitsuba.render.Mesh.has_vertex_colors(self)
+        Parameter ``buffer`` (enoki.dynamic.Float32):
+            *no description available*
 
-        Does this mesh have per-vertex texture colors?
+        Returns → None:
+            *no description available*
 
-        Returns → bool:
+    .. py:method:: mitsuba.render.Mesh.attribute_buffer(self, name)
+
+        Return the mesh attribute associated with ``name``
+
+        Parameter ``name`` (str):
+            *no description available*
+
+        Returns → enoki.dynamic.Float32:
+            *no description available*
+
+    .. py:method:: mitsuba.render.Mesh.eval_parameterization(self, uv, active=True)
+
+        Parameter ``uv`` (enoki.scalar.Vector2f):
+            *no description available*
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → :py:obj:`mitsuba.render.SurfaceInteraction3f`:
+            *no description available*
+
+    .. py:method:: mitsuba.render.Mesh.face_count(self)
+
+        Return the total number of faces
+
+        Returns → int:
+            *no description available*
+
+    .. py:method:: mitsuba.render.Mesh.faces_buffer(self)
+
+        Return face indices buffer
+
+        Returns → enoki.dynamic.UInt32:
             *no description available*
 
     .. py:method:: mitsuba.render.Mesh.has_vertex_normals(self)
@@ -12037,7 +12500,7 @@
         Parameter ``active`` (bool):
             Mask to specify active lanes.
 
-        Returns → Tuple[bool, float, float, float]:
+        Returns → :py:obj:`mitsuba.render.PreliminaryIntersection3f`:
             Returns an ordered tuple ``(mask, u, v, t)``, where ``mask``
             indicates whether an intersection was found, ``t`` contains the
             distance from the ray origin to the intersection point, and ``u``
@@ -12058,26 +12521,39 @@
         Returns → None:
             *no description available*
 
-    .. py:method:: mitsuba.render.Mesh.vertex_struct(self)
+    .. py:method:: mitsuba.render.Mesh.vertex_count(self)
 
-        Return a ``Struct`` instance describing the contents of the vertex
-        buffer
+        Return the total number of vertices
 
-        Returns → :py:obj:`mitsuba.core.Struct`:
+        Returns → int:
             *no description available*
 
-    .. py:method:: mitsuba.render.Mesh.vertices(self)
+    .. py:method:: mitsuba.render.Mesh.vertex_normals_buffer(self)
 
-        Return a pointer to the raw vertex buffer
+        Return vertex normals buffer
 
-        Returns → array:
+        Returns → enoki.dynamic.Float32:
             *no description available*
 
-    .. py:method:: mitsuba.render.Mesh.write(self, arg0)
+    .. py:method:: mitsuba.render.Mesh.vertex_positions_buffer(self)
 
-        Export mesh using the file format implemented by the subclass
+        Return vertex positions buffer
 
-        Parameter ``arg0`` (:py:obj:`mitsuba.core.Stream`):
+        Returns → enoki.dynamic.Float32:
+            *no description available*
+
+    .. py:method:: mitsuba.render.Mesh.vertex_texcoords_buffer(self)
+
+        Return vertex texcoords buffer
+
+        Returns → enoki.dynamic.Float32:
+            *no description available*
+
+    .. py:method:: mitsuba.render.Mesh.write_ply(self, filename)
+
+        Export mesh as a binary PLY file
+
+        Parameter ``filename`` (str):
             *no description available*
 
         Returns → None:
@@ -12428,7 +12904,7 @@
 
     .. py:data:: None
 
-        No flags set (default value)
+        
 
     .. py:data:: Isotropic
 
@@ -12541,6 +13017,76 @@
         Returns → :py:obj:`mitsuba.render.PositionSample3f`:
             *no description available*
 
+.. py:class:: mitsuba.render.PreliminaryIntersection3f
+
+    Stores preliminary information related to a ray intersection
+
+    This data structure is used as return type for the
+    Shape::ray_intersect_preliminary efficient ray intersection routine.
+    It stores whether the shape is intersected by a given ray, and cache
+    preliminary information about the intersection if that is the case.
+
+    If the intersection is deemed relevant, detailed intersection
+    information can later be obtained via the create_surface_interaction()
+    method.
+
+    .. py:method:: __init__(self)
+
+
+    .. py:method:: mitsuba.render.PreliminaryIntersection3f.compute_surface_interaction(self, ray, flags=HitComputeFlags.All, active=True)
+
+        Compute and return detailed information related to a surface
+        interaction
+
+        Parameter ``ray`` (:py:obj:`mitsuba.core.Ray3f`):
+            Ray associated with the ray intersection
+
+        Parameter ``flags`` (:py:obj:`mitsuba.render.HitComputeFlags`):
+            Flags specifying which information should be computed
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → :py:obj:`mitsuba.render.SurfaceInteraction3f`:
+            A data structure containing the detailed information
+
+    .. py:method:: mitsuba.render.PreliminaryIntersection3f.instance
+        :property:
+
+        Stores a pointer to the parent instance (if applicable)
+
+    .. py:method:: mitsuba.render.PreliminaryIntersection3f.is_valid(self)
+
+        Is the current interaction valid?
+
+        Returns → bool:
+            *no description available*
+
+    .. py:method:: mitsuba.render.PreliminaryIntersection3f.prim_index
+        :property:
+
+        Primitive index, e.g. the triangle ID (if applicable)
+
+    .. py:method:: mitsuba.render.PreliminaryIntersection3f.prim_uv
+        :property:
+
+        2D coordinates on the primitive surface parameterization
+
+    .. py:method:: mitsuba.render.PreliminaryIntersection3f.shape
+        :property:
+
+        Pointer to the associated shape
+
+    .. py:method:: mitsuba.render.PreliminaryIntersection3f.shape_index
+        :property:
+
+        Shape index, e.g. the shape ID in shapegroup (if applicable)
+
+    .. py:method:: mitsuba.render.PreliminaryIntersection3f.t
+        :property:
+
+        Distance traveled along the ray
+
 .. py:class:: mitsuba.render.ProjectiveCamera
 
     Base class: :py:obj:`mitsuba.render.Sensor`
@@ -12582,6 +13128,53 @@
 .. py:class:: mitsuba.render.Sampler
 
     Base class: :py:obj:`mitsuba.core.Object`
+
+    Base class of all sample generators.
+
+    For each sample in a pixel, a sample generator produces a
+    (hypothetical) point in the infinite dimensional random number cube. A
+    rendering algorithm can then request subsequent 1D or 2D components of
+    this point using the ``next_1d`` and ``next_2d`` functions.
+
+    Scalar and wavefront rendering algorithms will need interact with the
+    sampler interface in a slightly different way:
+
+    Scalar rendering algorithm:
+
+    1. Before beginning to render a pixel block, the rendering algorithm
+    calls ``seed`` to initialize a new sequence with the specific seed
+    offset. 2. The first pixel sample can now be computed, after which
+    ``advance`` needs to be invoked. This repeats until all pixel samples
+    have been generated. Note that some implementations need to be
+    configured for a certain number of pixel samples, and exceeding these
+    will lead to an exception being thrown. 3. While computing a pixel
+    sample, the rendering algorithm usually requests batches of (pseudo-)
+    random numbers using the ``next_1d`` and ``next_2d`` functions before
+    moving on to the next sample.
+
+    Wavefront rendering algorithm:
+
+    1. Before beginning to render the wavefront, the rendering algorithm
+    needs to inform the sampler of the amount of samples rendered in
+    parallel for every pixel in the wavefront. This can be achieved by
+    calling ``set_samples_per_wavefront`` . 2. Then the rendering
+    algorithm should seed the sampler and set the appropriate wavefront
+    size by calling ``seed``. A different seed value, based on the
+    ``base_seed`` and the seed offset, will be used for every sample (of
+    every pixel) in the wavefront. 3. ``advance`` can be used to advance
+    to the next sample in the sequence. 4. As in the scalar approach, the
+    rendering algorithm can request batches of (pseudo-) random numbers
+    using the ``next_1d`` and ``next_2d`` functions.
+
+    .. py:method:: mitsuba.render.Sampler.advance(self)
+
+        Advance to the next sample.
+
+        A subsequent call to ``next_1d`` or ``next_2d`` will access the first
+        1D or 2D components of this sample.
+
+        Returns → None:
+            *no description available*
 
     .. py:method:: mitsuba.render.Sampler.clone(self)
 
@@ -12625,15 +13218,28 @@
         Returns → int:
             *no description available*
 
-    .. py:method:: mitsuba.render.Sampler.seed(self, seed_value)
+    .. py:method:: mitsuba.render.Sampler.seed(self, seed_offset, wavefront_size=1)
 
         Deterministically seed the underlying RNG, if applicable.
 
         In the context of wavefront ray tracing & dynamic arrays, this
-        function must be called with a ``seed_value`` matching the size of the
-        wavefront.
+        function must be called with ``wavefront_size`` matching the size of
+        the wavefront.
 
-        Parameter ``seed_value`` (int):
+        Parameter ``seed_offset`` (int):
+            *no description available*
+
+        Parameter ``wavefront_size`` (int):
+            *no description available*
+
+        Returns → None:
+            *no description available*
+
+    .. py:method:: mitsuba.render.Sampler.set_samples_per_wavefront(self, samples_per_wavefront)
+
+        Set the number of samples per pass in wavefront modes (default is 1)
+
+        Parameter ``samples_per_wavefront`` (int):
             *no description available*
 
         Returns → None:
@@ -12641,7 +13247,7 @@
 
     .. py:method:: mitsuba.render.Sampler.wavefront_size(self)
 
-        Return the size of the wavefront, or 0 if not seeded.
+        Return the size of the wavefront (or 0, if not seeded)
 
         Returns → int:
             *no description available*
@@ -12672,7 +13278,7 @@
         Returns → List[str]:
             *no description available*
 
-    .. py:method:: mitsuba.render.SamplingIntegrator.sample(self, scene, sampler, ray, active=True)
+    .. py:method:: mitsuba.render.SamplingIntegrator.sample(self, scene, sampler, ray, medium=None, active=True)
 
         Sample the incident radiance along a ray.
 
@@ -12685,6 +13291,10 @@
 
         Parameter ``ray`` (:py:obj:`mitsuba.core.RayDifferential3f`):
             A ray, optionally with differentials
+
+        Parameter ``medium`` (:py:obj:`mitsuba.render.Medium`):
+            If the ray is inside a medium, this parameter holds a pointer to
+            that medium
 
         Parameter ``active`` (bool):
             A mask that indicates which SIMD lanes are active
@@ -12707,7 +13317,8 @@
         Remark:
             In the Python bindings, this function returns the ``aov`` output
             argument as an additional return value. In other words: `` (spec,
-            mask, aov) = integrator.sample(scene, sampler, ray, active) ``
+            mask, aov) = integrator.sample(scene, sampler, ray, medium,
+            active) ``
 
     .. py:method:: mitsuba.render.SamplingIntegrator.should_stop(self)
 
@@ -12764,22 +13375,45 @@
         Returns → float:
             *no description available*
 
-    .. py:method:: mitsuba.render.Scene.ray_intersect(self, ray, active=True)
+    .. py:method:: mitsuba.render.Scene.ray_intersect(overloaded)
 
-        Intersect a ray against all primitives stored in the scene and return
-        information about the resulting surface interaction
 
-        Parameter ``ray`` (:py:obj:`mitsuba.core.Ray3f`):
-            A 3-dimensional ray data structure with minimum/maximum extent
-            information, as well as a time value (which matters when the
-            shapes are in motion)
+        .. py:method:: ray_intersect(self, ray, active=True)
 
-        Parameter ``active`` (bool):
-            Mask to specify active lanes.
+            Intersect a ray against all primitives stored in the scene and return
+            information about the resulting surface interaction
 
-        Returns → :py:obj:`mitsuba.render.SurfaceInteraction`:
-            A detailed surface interaction record. Query its ``is_valid()``
-            method to determine whether an intersection was actually found.
+            Parameter ``ray`` (:py:obj:`mitsuba.core.Ray3f`):
+                A 3-dimensional ray data structure with minimum/maximum extent
+                information, as well as a time value (which matters when the
+                shapes are in motion)
+
+            Returns → :py:obj:`mitsuba.render.SurfaceInteraction`:
+                A detailed surface interaction record. Query its ``is_valid()``
+                method to determine whether an intersection was actually found.
+
+            Parameter ``active`` (bool):
+                Mask to specify active lanes.
+
+        .. py:method:: ray_intersect(self, ray, flags, active=True)
+
+            Intersect a ray against all primitives stored in the scene and return
+            information about the resulting surface interaction
+
+            Parameter ``ray`` (:py:obj:`mitsuba.core.Ray3f`):
+                A 3-dimensional ray data structure with minimum/maximum extent
+                information, as well as a time value (which matters when the
+                shapes are in motion)
+
+            Returns → :py:obj:`mitsuba.render.SurfaceInteraction`:
+                A detailed surface interaction record. Query its ``is_valid()``
+                method to determine whether an intersection was actually found.
+
+            Parameter ``flags`` (:py:obj:`mitsuba.render.HitComputeFlags`):
+                *no description available*
+
+            Parameter ``active`` (bool):
+                Mask to specify active lanes.
 
     .. py:method:: mitsuba.render.Scene.ray_intersect_naive(self, ray, active=True)
 
@@ -12790,6 +13424,17 @@
             Mask to specify active lanes.
 
         Returns → :py:obj:`mitsuba.render.SurfaceInteraction`:
+            *no description available*
+
+    .. py:method:: mitsuba.render.Scene.ray_intersect_preliminary(self, ray, active=True)
+
+        Parameter ``ray`` (:py:obj:`mitsuba.core.Ray3f`):
+            *no description available*
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → :py:obj:`mitsuba.render.PreliminaryIntersection`:
             *no description available*
 
     .. py:method:: mitsuba.render.Scene.ray_test(self, ray, active=True)
@@ -12829,9 +13474,14 @@
 
     .. py:method:: mitsuba.render.Scene.shapes(self)
 
-        Return the list of shapes
+        Returns → list:
+            *no description available*
 
-        Returns → List[:py:obj:`mitsuba.render.Shape`]:
+    .. py:method:: mitsuba.render.Scene.shapes_grad_enabled(self)
+
+        Return whether any of the shape's parameters require gradient
+
+        Returns → bool:
             *no description available*
 
 .. py:class:: mitsuba.render.Sensor
@@ -12883,19 +13533,6 @@
         be used for anything except creating clones.
 
         Returns → :py:obj:`mitsuba.render.Sampler`:
-            *no description available*
-
-    .. py:method:: mitsuba.render.Sensor.set_crop_window(self, crop_size, crop_offset)
-
-        Updates the film's crop window, and adjusts any state accordingly.
-
-        Parameter ``crop_size`` (enoki.scalar.Vector2i):
-            *no description available*
-
-        Parameter ``crop_offset`` (enoki.scalar.Vector2i):
-            *no description available*
-
-        Returns → None:
             *no description available*
 
     .. py:method:: mitsuba.render.Sensor.shutter_open(self)
@@ -12965,6 +13602,28 @@
             Returns → :py:obj:`mitsuba.core.BoundingBox3f`:
                 *no description available*
 
+    .. py:method:: mitsuba.render.Shape.bsdf(self)
+
+        Returns → :py:obj:`mitsuba.render.BSDF`:
+            *no description available*
+
+    .. py:method:: mitsuba.render.Shape.compute_surface_interaction(self, ray, pi, flags=HitComputeFlags.All, active=True)
+
+        Parameter ``ray`` (:py:obj:`mitsuba.core.Ray3f`):
+            *no description available*
+
+        Parameter ``pi`` (:py:obj:`mitsuba.render.PreliminaryIntersection3f`):
+            *no description available*
+
+        Parameter ``flags`` (:py:obj:`mitsuba.render.HitComputeFlags`):
+            *no description available*
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → :py:obj:`mitsuba.render.SurfaceInteraction3f`:
+            *no description available*
+
     .. py:method:: mitsuba.render.Shape.effective_primitive_count(self)
 
         Return the number of primitives (triangles, hairs, ..) contributed to
@@ -12989,23 +13648,6 @@
         Return the medium that lies on the exterior of this shape
 
         Returns → :py:obj:`mitsuba.render.Medium`:
-            *no description available*
-
-    .. py:method:: mitsuba.render.Shape.fill_surface_interaction(self, ray, cache, si, active=True)
-
-        Parameter ``ray`` (:py:obj:`mitsuba.core.Ray3f`):
-            *no description available*
-
-        Parameter ``cache`` (float):
-            *no description available*
-
-        Parameter ``si`` (:py:obj:`mitsuba.render.SurfaceInteraction3f`):
-            *no description available*
-
-        Parameter ``active`` (bool):
-            Mask to specify active lanes.
-
-        Returns → None:
             *no description available*
 
     .. py:method:: mitsuba.render.Shape.id(self)
@@ -13050,27 +13692,13 @@
         Returns → bool:
             *no description available*
 
-    .. py:method:: mitsuba.render.Shape.normal_derivative(self, si, shading_frame=True, active=True)
+    .. py:method:: mitsuba.render.Shape.parameters_grad_enabled(self)
 
-        Return the derivative of the normal vector with respect to the UV
-        parameterization
+        Return whether shape's parameters require gradients (default
+        implementation return false)
 
-        This can be used to compute Gaussian and principal curvatures, amongst
-        other things.
-
-        Parameter ``si`` (:py:obj:`mitsuba.render.SurfaceInteraction3f`):
-            Surface interaction associated with the query
-
-        Parameter ``shading_frame`` (bool):
-            Specifies whether to compute the derivative of the geometric
-            normal *or* the shading normal of the surface
-
-        Parameter ``active`` (bool):
-            Mask to specify active lanes.
-
-        Returns → Tuple[enoki.scalar.Vector3f, enoki.scalar.Vector3f]:
-            The partial derivatives of the normal vector with respect to ``u``
-            and ``v``.
+        Returns → bool:
+            *no description available*
 
     .. py:method:: mitsuba.render.Shape.pdf_direction(self, it, ps, active=True)
 
@@ -13112,7 +13740,26 @@
         Returns → int:
             *no description available*
 
-    .. py:method:: mitsuba.render.Shape.ray_intersect(self, ray, active=True)
+    .. py:method:: mitsuba.render.Shape.ray_intersect(self, ray, flags=HitComputeFlags.All, active=True)
+
+        Test for an intersection and return detailed information
+
+        This operation combines the prior ray_intersect_preliminary() and
+        compute_surface_interaction() operations.
+
+        Parameter ``ray`` (:py:obj:`mitsuba.core.Ray3f`):
+            The ray to be tested for an intersection
+
+        Parameter ``flags`` (:py:obj:`mitsuba.render.HitComputeFlags`):
+            Describe how the detailed information should be computed
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → :py:obj:`mitsuba.render.SurfaceInteraction3f`:
+            *no description available*
+
+    .. py:method:: mitsuba.render.Shape.ray_intersect_preliminary(self, ray, active=True)
 
         Fast ray intersection test
 
@@ -13135,7 +13782,7 @@
         Parameter ``active`` (bool):
             Mask to specify active lanes.
 
-        Returns → :py:obj:`mitsuba.render.SurfaceInteraction3f`:
+        Returns → :py:obj:`mitsuba.render.PreliminaryIntersection3f`:
             *no description available*
 
     .. py:method:: mitsuba.render.Shape.ray_test(self, ray, active=True)
@@ -13319,11 +13966,11 @@
 
     .. py:method:: mitsuba.render.Spiral.next_block(self)
 
-        Return the offset and size of the next block.
+        Return the offset, size and unique identifer of the next block.
 
         A size of zero indicates that the spiral traversal is done.
 
-        Returns → Tuple[enoki.scalar.Vector2i, enoki.scalar.Vector2i]:
+        Returns → Tuple[enoki.scalar.Vector2i, enoki.scalar.Vector2i, int]:
             *no description available*
 
     .. py:method:: mitsuba.render.Spiral.reset(self)
@@ -13396,7 +14043,7 @@
             Returns → :py:obj:`mitsuba.render.BSDF`:
                 *no description available*
 
-    .. py:method:: mitsuba.render.SurfaceInteraction3f.compute_partials(self, ray)
+    .. py:method:: mitsuba.render.SurfaceInteraction3f.compute_uv_partials(self, ray)
 
         Computes texture coordinate partials
 
@@ -13405,6 +14052,16 @@
 
         Returns → None:
             *no description available*
+
+    .. py:method:: mitsuba.render.SurfaceInteraction3f.dn_du
+        :property:
+
+        Normal partials wrt. the UV parameterization
+
+    .. py:method:: mitsuba.render.SurfaceInteraction3f.dn_dv
+        :property:
+
+        Normal partials wrt. the UV parameterization
 
     .. py:method:: mitsuba.render.SurfaceInteraction3f.dp_du
         :property:
@@ -13438,6 +14095,11 @@
             Mask to specify active lanes.
 
         Returns → :py:obj:`mitsuba.render.Emitter`:
+            *no description available*
+
+    .. py:method:: mitsuba.render.SurfaceInteraction3f.has_n_partials(self)
+
+        Returns → bool:
             *no description available*
 
     .. py:method:: mitsuba.render.SurfaceInteraction3f.has_uv_partials(self)
@@ -13689,6 +14351,13 @@
         Returns → enoki.scalar.Vector3f:
             An trichromatic intensity or reflectance value
 
+    .. py:method:: mitsuba.render.Texture.is_spatially_varying(self)
+
+        Does this texture evaluation depend on the UV coordinates
+
+        Returns → bool:
+            *no description available*
+
     .. py:method:: mitsuba.render.Texture.mean(self)
 
         Return the mean value of the spectrum over the support
@@ -13703,10 +14372,23 @@
         Returns → float:
             *no description available*
 
-    .. py:method:: mitsuba.render.Texture.pdf(self, si, active=True)
+    .. py:method:: mitsuba.render.Texture.pdf_position(self, p, active=True)
 
-        Evaluate the density function of the sample() method as a probability
-        per unit wavelength (in units of 1/nm).
+        Returns the probability per unit area of sample_position()
+
+        Parameter ``p`` (enoki.scalar.Vector2f):
+            *no description available*
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → float:
+            *no description available*
+
+    .. py:method:: mitsuba.render.Texture.pdf_spectrum(self, si, active=True)
+
+        Evaluate the density function of the sample_spectrum() method as a
+        probability per unit wavelength (in units of 1/nm).
 
         Not every implementation necessarily provides this function. The
         default implementation throws an exception.
@@ -13721,7 +14403,30 @@
             A density value for each wavelength in ``si.wavelengths`` (hence
             the Wavelength type).
 
-    .. py:method:: mitsuba.render.Texture.sample(self, si, sample, active=True)
+    .. py:method:: mitsuba.render.Texture.sample_position(self, sample, active=True)
+
+        Importance sample a surface position proportional to the overall
+        spectral reflectance or intensity of the texture
+
+        This function assumes that the texture is implemented as a mapping
+        from 2D UV positions to texture values, which is not necessarily true
+        for all textures (e.g. 3D noise functions, mesh attributes, etc.). For
+        this reason, not every will plugin provide a specialized
+        implementation, and the default implementation simply return the input
+        sample (i.e. uniform sampling is used).
+
+        Parameter ``sample`` (enoki.scalar.Vector2f):
+            A 2D vector of uniform variates
+
+        Parameter ``active`` (bool):
+            Mask to specify active lanes.
+
+        Returns → Tuple[enoki.scalar.Vector2f, float]:
+            1. A texture-space position in the range :math:`[0, 1]^2`
+
+        2. The associated probability per unit area in UV space
+
+    .. py:method:: mitsuba.render.Texture.sample_spectrum(self, si, sample, active=True)
 
         Importance sample a set of wavelengths proportional to the spectrum
         defined at the given surface position
@@ -13874,6 +14579,17 @@
 
 .. py:function:: mitsuba.render.has_flag(overloaded)
 
+
+    .. py:function:: has_flag(arg0, arg1)
+
+        Parameter ``arg0`` (:py:obj:`mitsuba.render.HitComputeFlags`):
+            *no description available*
+
+        Parameter ``arg1`` (:py:obj:`mitsuba.render.HitComputeFlags`):
+            *no description available*
+
+        Returns → bool:
+            *no description available*
 
     .. py:function:: has_flag(arg0, arg1)
 
@@ -14651,7 +15367,7 @@
        sufficient statistical evidence to reject this hypothesis.
 
     Parameter ``sample_dim`` (int):
-       Numer of random dimensions consumed by ``sample_func`` per sample. The
+       Number of random dimensions consumed by ``sample_func`` per sample. The
        default value is ``2``.
 
     Parameter ``sample_count`` (int):
@@ -14760,32 +15476,55 @@
 
     Maps between the unit sphere and a [cos(theta), phi] parameterization.
 
-.. py:function:: mitsuba.python.util.traverse(node)
+.. py:class:: mitsuba.python.util.ParameterMap(properties, hierarchy)
+
+    Dictionary-like object that references various parameters used in a Mitsuba
+    scene graph. Parameters can be read and written using standard syntax
+    (``parameter_map[key]``). The class exposes several non-standard functions,
+    specifically :py:meth:`~:py:obj:`mitsuba.python.util.ParameterMap.torch`()`,
+    :py:meth:`~:py:obj:`mitsuba.python.util.ParameterMap.update`()`, and
+    :py:meth:`~:py:obj:`mitsuba.python.util.ParameterMap.keep`()`.
+
+    .. py:method:: __init__(properties, hierarchy)
+
+        Private constructor (use
+        :py:func:`mitsuba.python.util.traverse()` instead)
+
+        
+    .. py:method:: mitsuba.python.util.ParameterMap.torch() -> dict
+
+        Converts all Enoki arrays into PyTorch arrays and return them as a
+        dictionary. This is mainly useful when using PyTorch to optimize a
+        Mitsuba scene.
+
+    .. py:method:: mitsuba.python.util.ParameterMap.set_dirty(key: str)
+
+        Marks a specific parameter and its parent objects as dirty. A subsequent call
+        to :py:meth:`~:py:obj:`mitsuba.python.util.ParameterMap.update`()` will refresh their internal
+        state. This function is automatically called when overwriting a parameter using
+        :py:meth:`~:py:obj:`mitsuba.python.util.ParameterMap.__setitem__`()`.
+
+    .. py:method:: mitsuba.python.util.ParameterMap.update() -> None
+
+        This function should be called at the end of a sequence of writes
+        to the dictionary. It automatically notifies all modified Mitsuba
+        objects and their parent objects that they should refresh their
+        internal state. For instance, the scene may rebuild the kd-tree
+        when a shape was modified, etc.
+
+    .. py:method:: mitsuba.python.util.ParameterMap.keep(keys: list) -> None
+
+        Reduce the size of the dictionary by only keeping elements,
+        whose keys are part of the provided list 'keys'.
+
+.. py:function:: mitsuba.python.util.is_differentiable(p)
+
+.. py:function:: mitsuba.python.util.traverse(node: mitsuba.core.Object) -> mitsuba.python.util.ParameterMap
 
     Traverse a node of Mitsuba's scene graph and return a dictionary-like
     object that can be used to read and write associated scene parameters.
 
-    This dictionary exposes multiple non-standard methods:
-
-    1. ``keep(self, keys: list) -> None``:
-
-       Reduce the size of the dictionary by only keeping elements,
-       whose keys are part of the provided list 'keys'.
-
-    2. ``update(self) -> None``:
-
-       This function should be called at the end of a sequence of writes
-       to the dictionary. It automatically notifies all modified Mitsuba
-       objects and their parent objects that they should refresh their
-       internal state. For instance, the scene may rebuild the kd-tree
-       when a shape was modified, etc.
-
-    3. ``torch(self) -> dict``:
-
-       Converts all Enoki arrays into PyTorch arrays and return them as a
-       dictionary. This is mainly useful when using PyTorch to optimize a
-       Mitsuba scene.
-
+    See also :py:class:`mitsuba.python.util.ParameterMap`.
 
 .. py:function:: mitsuba.python.math.rlgamma(a, x)
 
@@ -14795,11 +15534,8 @@
 
     Base class: :py:obj:`mitsuba.python.autodiff.Optimizer`
 
-    Implements the optimization technique presented in
-
-    "Adam: A Method for Stochastic Optimization"
-    Diederik P. Kingma and Jimmy Lei Ba
-    ICLR 2015
+    Implements the Adam optimizer presented in the paper *Adam: A Method for
+    Stochastic Optimization* by Kingman and Ba, ICLR 2015.
 
     .. py:method:: __init__(params, lr, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
 
@@ -14815,6 +15551,10 @@
             order gradient moments
 
         
+    .. py:method:: mitsuba.python.autodiff.Adam.step()
+
+        Take a gradient step 
+
 .. py:class:: mitsuba.python.autodiff.Optimizer(params, lr)
 
     Base class of all gradient-based optimizers (currently SGD and Adam)
@@ -14842,7 +15582,21 @@
     Base class: :py:obj:`mitsuba.python.autodiff.Optimizer`
 
     Implements basic stochastic gradient descent with a fixed learning rate
-    and, optionally, momentum (0.9 is a typical parameter value).
+    and, optionally, momentum :cite:`Sutskever2013Importance` (0.9 is a typical
+    parameter value for the ``momentum`` parameter).
+
+    The momentum-based SGD uses the update equation
+
+    .. math::
+
+        v_{i+1} = \mu \cdot v_i +  g_{i+1}
+
+    .. math::
+        p_{i+1} = p_i + \varepsilon \cdot v_{i+1},
+
+    where :math:`v` is the velocity, :math:`p` are the positions,
+    :math:`\varepsilon` is the learning rate, and :math:`\mu` is
+    the momentum parameter.
 
     .. py:method:: __init__(params, lr, momentum=0)
 
@@ -14857,34 +15611,307 @@
 
         Take a gradient step 
 
-.. py:function:: mitsuba.python.autodiff.render(scene, spp=None, sensor_index=0)
+.. py:function:: mitsuba.python.autodiff._render_helper(scene, spp=None, sensor_index=0)
 
-    Render the specified Mitsuba scene and return a floating point
-    array containing RGB values and AOVs, if applicable
+    Internally used function: render the specified Mitsuba scene and return a
+    floating point array containing RGB values and AOVs, if applicable
 
-.. py:function:: mitsuba.python.autodiff.render_diff(scene, optimizer, unbiased=True, spp=None, spp_primal=None, spp_diff=None, sensor_index=0)
+.. py:function:: mitsuba.python.autodiff.render(scene, spp: Union[None, int, Tuple[int, int]] = None, unbiased=False, optimizer: mitsuba.python.autodiff.Optimizer = None, sensor_index=0)
 
-    Perform a differentiable of the scene `scene`.
+    Perform a differentiable of the scene `scene`, returning a floating point
+    array containing RGB values and AOVs, if applicable.
 
-    This function differs from ``render()`` in that it splits the rendering
-    step into two separate passes that generate the primal image and gradients,
-    respectively (assuming that ``unbiased=True`` is specified). This is
-    necessary to avoid correlations that would otherwise introduce bias into
-    the resulting parameter gradients.
+    Parameter ``spp`` (``None``, ``int``, or a 2-tuple ``(int, int)``):
+       Specifies the number of samples per pixel to be used for rendering,
+       overriding the value that is specified in the scene. If ``spp=None``,
+       the original value takes precedence. If ``spp`` is a 2-tuple
+       ``(spp_primal: int, spp_deriv: int)``, the first element specifies the
+       number of samples for the *primal* pass, and the second specifies the
+       number of samples for the *derivative* pass. See the explanation of the
+       ``unbiased`` parameter for further detail on what these mean.
 
-    The number of samples per pixel can be specified separately for both primal
-    and derivative passes.
+       Memory usage is roughly proportional to the ``spp``, value, hence this
+       parameter should be reduced if you encounter out-of-memory errors.
 
-    The number of samples per pixel per pass can be specified separately for
-    both primal (``spp_primal``) and derivative (``spp_diff``) passes or
-    jointly for both (``spp``).
+    Parameter ``unbiased`` (``bool``):
+        One potential issue when naively differentiating a rendering algorithm
+        is that the same set of Monte Carlo sample is used to generate both the
+        primal output (i.e. the image) along with derivative output. When the
+        rendering algorithm and objective are jointly differentiated, we end up
+        with expectations of products that do *not* satisfy the equality
+        :math:`\mathbb{E}[X Y]=\mathbb{E}[X]\, \mathbb{E}[Y]` due to
+        correlations between :math:`X` and :math:`Y` that result from this
+        sample re-use.
+
+        When ``unbiased=True``, the ``render()`` function will generate an
+        *unbiased* estimate that de-correlates primal and derivative
+        components, which boils down to rendering the image twice and naturally
+        comes at some cost in performance :math:`(\sim 1.6      imes\!)`. Often,
+        biased gradients are good enough, in which case ``unbiased=False``
+        should be specified instead.
+
+        The number of samples per pixel per pass can be specified separately
+        for both passes by passing a tuple to the ``spp`` parameter.
+
+        Note that unbiased mode is only relevant for reverse-mode
+        differentiation. It is not needed when visualizing parameter gradients
+        in image space using forward-mode differentiation.
+
+    Parameter ``optimizer`` (:py:class:`mitsuba.python.autodiff.Optimizer`):
+        The optimizer referencing relevant scene parameters must be specified
+        when ``unbiased=True``. Otherwise, there is no need to provide this
+        parameter.
+
+    Parameter ``sensor_index`` (``int``):
+        When the scene contains more than one sensor/camera, this parameter
+        can be specified to select the desired sensor.
 
 .. py:function:: mitsuba.python.autodiff.render_torch(scene, params=None, **kwargs)
 
-.. py:function:: mitsuba.python.autodiff.write_bitmap(filename, data, resolution)
+.. py:function:: mitsuba.python.autodiff.write_bitmap(filename, data, resolution, write_async=True)
 
-    Write the linearized RGB image in `data` to a
-    PNG/EXR/.. file with resolution `resolution`.
+    Write the linearized RGB image in `data` to a PNG/EXR/.. file with
+    resolution `resolution`.
+
+.. py:class:: mitsuba.python.xml.Files
+
+    Enum for different files or dicts containing specific info
+
+.. py:class:: mitsuba.python.xml.WriteXML(path, split_files=False)
+
+    File Writing API
+    Populates a dictionary with scene data, then writes it to XML.
+
+    .. py:method:: mitsuba.python.xml.WriteXML.data_add(key, value, file=0)
+
+        Add an entry to a given subdict.
+
+        Params
+        ------
+
+        key: dict key
+        value: entry
+        file: the subdict to which to add the data
+
+    .. py:method:: mitsuba.python.xml.WriteXML.add_comment(comment, file=0)
+
+        Add a comment to the scene dict
+
+        Params
+        ------
+
+        comment: text of the comment
+        file: the subdict to which to add the comment
+
+    .. py:method:: mitsuba.python.xml.WriteXML.add_include(file)
+
+        Add an include tag to the main file.
+        This is used when splitting the XML scene file in multiple fragments.
+
+        Params
+        ------
+
+        file: the file to include
+
+    .. py:method:: mitsuba.python.xml.WriteXML.wf(ind, st, tabs=0)
+
+        Write a string to file index ind.
+        Optionally indent the string by a number of tabs
+
+        Params
+        ------
+
+        ind: index of the file to write to
+        st: text to write
+        tabs: optional number of tabs to add
+
+    .. py:method:: mitsuba.python.xml.WriteXML.set_filename(name)
+
+        Open the files for output,
+        using filenames based on the given base name.
+        Create the necessary folders to create the file at the specified path.
+
+        Params
+        ------
+
+        name: path to the scene.xml file to write.
+
+    .. py:method:: mitsuba.python.xml.WriteXML.set_output_file(file)
+
+        Switch next output to the given file index
+
+        Params
+        ------
+
+        file: index of the file to start writing to
+
+    .. py:method:: mitsuba.python.xml.WriteXML.write_comment(comment, file=None)
+
+        Write an XML comment to file.
+
+        Params
+        ------
+
+        comment: The text of the comment to write
+        file: Index of the file to write to
+
+    .. py:method:: mitsuba.python.xml.WriteXML.write_header(file, comment=None)
+
+        Write an XML header to a specified file.
+        Optionally add a comment to describe the file.
+
+        Params
+        ------
+
+        file: The file to write to
+        comment: Optional comment to add (e.g. "# Geometry file")
+
+    .. py:method:: mitsuba.python.xml.WriteXML.open_element(name, attributes={}, file=None)
+
+        Open an XML tag (e.g. emitter, bsdf...)
+
+        Params
+        ------
+
+        name: Name of the tag (emitter, bsdf, shape...)
+        attributes: Additional fileds to add to the opening tag (e.g. name, type...)
+        file: File to write to
+
+    .. py:method:: mitsuba.python.xml.WriteXML.close_element(file=None)
+
+        Close the last tag we opened in a given file.
+
+        Params
+        ------
+
+        file: The file to write to
+
+    .. py:method:: mitsuba.python.xml.WriteXML.element(name, attributes={}, file=None)
+
+        Write a single-line XML element.
+
+        Params
+        ------
+
+        name: Name of the element (e.g. integer, string, rotate...)
+        attributes: Additional fields to add to the element (e.g. name, value...)
+        file: The file to write to
+
+    .. py:method:: mitsuba.python.xml.WriteXML.get_plugin_tag(plugin_type)
+
+        Get the corresponding tag of a given plugin (e.g. 'bsdf' for 'diffuse')
+        If the given type (e.g. 'transform') is not a plugin, returns None.
+
+        Params
+        ------
+
+        plugin_type: Name of the type (e.g. 'diffuse', 'ply'...)
+
+    .. py:method:: mitsuba.python.xml.WriteXML.current_tag()
+
+        Get the tag in which we are currently writing
+
+    .. py:method:: mitsuba.python.xml.WriteXML.configure_defaults(scene_dict)
+
+        Traverse the scene graph and look for properties in the defaults dict.
+        For such properties, store their value in a default tag and replace the value by $name in the prop.
+
+        Params
+        ------
+
+        scene_dict: The dictionary containing the scene info
+
+    .. py:method:: mitsuba.python.xml.WriteXML.preprocess_scene(scene_dict)
+
+        Preprocess the scene dictionary before writing it to file:
+            - Add default properties.
+            - Reorder the scene dict before writing it to file.
+            - Separate the dict into different category-specific subdicts.
+            - If not splitting files, merge them in the end.
+
+        Params
+        ------
+
+        scene_dict: The dictionary containing the scene data
+
+    .. py:method:: mitsuba.python.xml.WriteXML.format_spectrum(entry, entry_type)
+
+        Format rgb or spectrum tags to the proper XML output.
+        The entry should contain the name and value of the spectrum entry.
+        The type is passed separately, since it is popped from the dict in write_dict
+
+        Params
+        ------
+
+        entry: the dict containing the spectrum
+        entry_type: either 'spectrum' or 'rgb'
+
+    .. py:method:: mitsuba.python.xml.WriteXML.format_path(filepath, tag)
+
+        Given a filepath, either copy it in the scene folder (in the corresponding directory)
+        or convert it to a relative path.
+
+        Params
+        ------
+
+        filepath: the path to the given file
+        tag: the tag this path property belongs to in (shape, texture, spectrum)
+
+    .. py:method:: mitsuba.python.xml.WriteXML.write_dict(data)
+
+        Main XML writing routine.
+        Given a dictionary, iterate over its entries and write them to file.
+        Calls itself for nested dictionaries.
+
+        Params
+        ------
+
+        data: The dictionary to write to file.
+
+    .. py:method:: mitsuba.python.xml.WriteXML.process(scene_dict)
+
+        Preprocess then write the input dict to XML file format
+
+        Params
+        ------
+
+        scene_dict: The dictionary containing all the scene info.
+
+    .. py:method:: mitsuba.python.xml.WriteXML.transform_matrix(transform)
+
+        Converts a mitsuba Transform4f into a dict entry.
+        This dict entry won't have a 'type' because it's handled in a specific case.
+
+        Params
+        ------
+
+        transform: the given transform matrix
+
+    .. py:method:: mitsuba.python.xml.WriteXML.decompose_transform(transform, export_scale=False)
+
+        Export a transform as a combination of rotation, scale and translation.
+        This helps manually modifying the transform after export (for cameras for instance)
+
+        Params
+        ------
+
+        transform: The Transform4f transform matrix to decompose
+        export_scale: Whether to add a scale property or not. (e.g. don't do it for cameras to avoid clutter)
+
+.. py:function:: mitsuba.python.xml.copy2(src, dst, *, follow_symlinks=True)
+
+    Copy data and metadata. Return the file's destination.
+
+    Metadata is copied with copystat(). Please see the copystat function
+    for more information.
+
+    The destination may be a directory.
+
+    If follow_symlinks is false, symlinks won't be followed. This
+    resembles GNU's "cp -P src dst".
+
+
+.. py:function:: mitsuba.python.xml.dict_to_xml(scene_dict, filename, split_files=False)
 
 .. py:function:: mitsuba.python.test.util.fresolver_append_path(func)
 

@@ -9,6 +9,9 @@
 #if defined(MTS_ENABLE_EMBREE)
     #include <embree3/rtcore.h>
 #endif
+#if defined(MTS_ENABLE_OPTIX)
+#  include <mitsuba/render/optix/shapes.h>
+#endif
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -31,40 +34,59 @@ NAMESPACE_BEGIN(mitsuba)
 #endif
 
 MTS_VARIANT Shape<Float, Spectrum>::Shape(const Properties &props) : m_id(props.id()) {
-    for (auto &kv : props.objects()) {
-        Emitter *emitter = dynamic_cast<Emitter *>(kv.second.get());
-        BSDF *bsdf = dynamic_cast<BSDF *>(kv.second.get());
-        Medium *medium = dynamic_cast<Medium *>(kv.second.get());
+    m_to_world = props.transform("to_world", ScalarTransform4f());
+    m_to_object = m_to_world.inverse();
+
+    for (auto &[name, obj] : props.objects(false)) {
+        Emitter *emitter = dynamic_cast<Emitter *>(obj.get());
+        Sensor *sensor = dynamic_cast<Sensor *>(obj.get());
+        BSDF *bsdf = dynamic_cast<BSDF *>(obj.get());
+        Medium *medium = dynamic_cast<Medium *>(obj.get());
 
         if (emitter) {
             if (m_emitter)
                 Throw("Only a single Emitter child object can be specified per shape.");
             m_emitter = emitter;
+        } else if (sensor) {
+            if (m_sensor)
+                Throw("Only a single Sensor child object can be specified per shape.");
+            m_sensor = sensor;
         } else if (bsdf) {
             if (m_bsdf)
                 Throw("Only a single BSDF child object can be specified per shape.");
             m_bsdf = bsdf;
         } else if (medium) {
-            if (kv.first == "interior") {
+            if (name == "interior") {
                 if (m_interior_medium)
                     Throw("Only a single interior medium can be specified per shape.");
                 m_interior_medium = medium;
-            } else if (kv.first == "exterior") {
+            } else if (name == "exterior") {
                 if (m_exterior_medium)
                     Throw("Only a single exterior medium can be specified per shape.");
                 m_exterior_medium = medium;
             }
         } else {
-            Throw("Tried to add an unsupported object of type \"%s\"", kv.second);
+            continue;
         }
+
+        props.mark_queried(name);
     }
 
     // Create a default diffuse BSDF if needed.
-    if (!m_bsdf)
-        m_bsdf = PluginManager::instance()->create_object<BSDF>(Properties("diffuse"));
+    if (!m_bsdf) {
+        Properties props2("diffuse");
+        if (m_emitter)
+            props2.set_float("reflectance", 0.f);
+        m_bsdf = PluginManager::instance()->create_object<BSDF>(props2);
+    }
 }
 
-MTS_VARIANT Shape<Float, Spectrum>::~Shape() {}
+MTS_VARIANT Shape<Float, Spectrum>::~Shape() {
+#if defined(MTS_ENABLE_OPTIX)
+    if constexpr (is_cuda_array_v<Float>)
+        cuda_free(m_optix_data_ptr);
+#endif
+}
 
 MTS_VARIANT std::string Shape<Float, Spectrum>::id() const {
     return m_id;
@@ -99,6 +121,7 @@ template <typename Float, typename Spectrum>
 void embree_intersect_scalar(int* valid,
                              void* geometryUserPtr,
                              unsigned int geomID,
+                             unsigned int instID,
                              RTCRay* rtc_ray,
                              RTCHit* rtc_hit) {
     MTS_IMPORT_TYPES(Shape)
@@ -123,10 +146,14 @@ void embree_intersect_scalar(int* valid,
 
     // Check whether this is a shadow ray or not
     if (rtc_hit) {
-        auto [success, tt] = shape->ray_intersect(ray, nullptr);
-        if (success) {
-            rtc_ray->tfar = tt;
+        auto pi = shape->ray_intersect_preliminary(ray);
+        if (pi.is_valid()) {
+            rtc_ray->tfar = pi.t;
+            rtc_hit->u = pi.prim_uv.x();
+            rtc_hit->v = pi.prim_uv.y();
             rtc_hit->geomID = geomID;
+            rtc_hit->primID = 0;
+            rtc_hit->instID[0] = instID;
         }
     } else {
         if (shape->ray_test(ray))
@@ -138,6 +165,7 @@ template <typename Float, typename Spectrum>
 void embree_intersect_packet(int* valid,
                              void* geometryUserPtr,
                              unsigned int geomID,
+                             unsigned int instID,
                              RTCRayW* rays,
                              RTCHitW* hits) {
     MTS_IMPORT_TYPES(Shape)
@@ -164,10 +192,14 @@ void embree_intersect_packet(int* valid,
 
     // Check whether this is a shadow ray or not
     if (hits) {
-        auto [success, tt] = shape->ray_intersect(ray, nullptr, active);
-        active &= success;
-        store(rays->tfar, tt, active);
+        auto pi = shape->ray_intersect_preliminary(ray, active);
+        active &= pi.is_valid();
+        store(rays->tfar,   pi.t, active);
+        store(hits->u,      pi.prim_uv.x(), active);
+        store(hits->v,      pi.prim_uv.y(), active);
         store(hits->geomID, Int(geomID), active);
+        store(hits->primID, Int(0), active);
+        store(hits->instID[0], Int(instID), active);
     } else {
         active &= shape->ray_test(ray);
         store(rays->tfar, Float(-math::Infinity<Float>), active);
@@ -178,41 +210,82 @@ template <typename Float, typename Spectrum>
 void embree_intersect(const RTCIntersectFunctionNArguments* args) {
     if constexpr (!is_array_v<Float>) {
         RTCRayHit *rh = (RTCRayHit *) args->rayhit;
-        embree_intersect_scalar<Float, Spectrum>(args->valid, args->geometryUserPtr, args->geomID,
-                                                 (RTCRay*) &rh->ray, (RTCHit*) &rh->hit);
+        embree_intersect_scalar<Float, Spectrum>(
+            args->valid, args->geometryUserPtr, args->geomID,
+            args->context->instID[0], (RTCRay *) &rh->ray, (RTCHit *) &rh->hit);
     } else {
         RTCRayHitW *rh = (RTCRayHitW *) args->rayhit;
-        embree_intersect_packet<Float, Spectrum>(args->valid, args->geometryUserPtr, args->geomID,
-                                                 (RTCRayW*) &rh->ray, (RTCHitW*) &rh->hit);
+        embree_intersect_packet<Float, Spectrum>(
+            args->valid, args->geometryUserPtr, args->geomID,
+            args->context->instID[0], (RTCRayW *) &rh->ray,
+            (RTCHitW *) &rh->hit);
     }
 }
 
 template <typename Float, typename Spectrum>
 void embree_occluded(const RTCOccludedFunctionNArguments* args) {
     if constexpr (!is_array_v<Float>) {
-        embree_intersect_scalar<Float, Spectrum>(args->valid, args->geometryUserPtr, args->geomID,
-                                                 (RTCRay*) args->ray, nullptr);
+        embree_intersect_scalar<Float, Spectrum>(
+            args->valid, args->geometryUserPtr, args->geomID,
+            args->context->instID[0], (RTCRay *) args->ray, nullptr);
     } else {
-        embree_intersect_packet<Float, Spectrum>(args->valid, args->geometryUserPtr, args->geomID,
-                                                 (RTCRayW*) args->ray, nullptr);
+        embree_intersect_packet<Float, Spectrum>(
+            args->valid, args->geometryUserPtr, args->geomID,
+            args->context->instID[0], (RTCRayW *) args->ray, nullptr);
     }
 }
 
-MTS_VARIANT RTCGeometry Shape<Float, Spectrum>::embree_geometry(RTCDevice device) const {
-    RTCGeometry geom = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_USER);
-    rtcSetGeometryUserPrimitiveCount(geom, 1);
-    rtcSetGeometryUserData(geom, (void *) this);
-    rtcSetGeometryBoundsFunction(geom, embree_bbox<Float, Spectrum>, nullptr);
-    rtcSetGeometryIntersectFunction(geom, embree_intersect<Float, Spectrum>);
-    rtcSetGeometryOccludedFunction(geom, embree_occluded<Float, Spectrum>);
-    rtcCommitGeometry(geom);
-    return geom;
+MTS_VARIANT RTCGeometry Shape<Float, Spectrum>::embree_geometry(RTCDevice device) {
+    if constexpr (!is_cuda_array_v<Float>) {
+        RTCGeometry geom = rtcNewGeometry(device, RTC_GEOMETRY_TYPE_USER);
+        rtcSetGeometryUserPrimitiveCount(geom, 1);
+        rtcSetGeometryUserData(geom, (void *) this);
+        rtcSetGeometryBoundsFunction(geom, embree_bbox<Float, Spectrum>, nullptr);
+        rtcSetGeometryIntersectFunction(geom, embree_intersect<Float, Spectrum>);
+        rtcSetGeometryOccludedFunction(geom, embree_occluded<Float, Spectrum>);
+        rtcCommitGeometry(geom);
+        return geom;
+    } else {
+        Throw("embree_geometry() should only be called in CPU mode.");
+    }
 }
 #endif
 
 #if defined(MTS_ENABLE_OPTIX)
-MTS_VARIANT RTgeometrytriangles Shape<Float, Spectrum>::optix_geometry(RTcontext) {
-    NotImplementedError("optix_geometry");
+static const uint32_t optix_geometry_flags[1] = { OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT };
+
+MTS_VARIANT void Shape<Float, Spectrum>::optix_prepare_geometry() {
+    NotImplementedError("optix_prepare_geometry");
+}
+
+MTS_VARIANT
+void Shape<Float, Spectrum>::optix_fill_hitgroup_records(std::vector<HitGroupSbtRecord> &hitgroup_records,
+                                                         const OptixProgramGroup *program_groups) {
+    optix_prepare_geometry();
+    // Set hitgroup record data
+    hitgroup_records.push_back(HitGroupSbtRecord());
+    hitgroup_records.back().data = { (uintptr_t) this, m_optix_data_ptr };
+
+    size_t program_group_idx = (is_mesh() ? 2 : 3 + get_shape_descr_idx(this));
+    // Setup the hitgroup record and copy it to the hitgroup records array
+    rt_check(optixSbtRecordPackHeader(program_groups[program_group_idx], &hitgroup_records.back()));
+}
+
+MTS_VARIANT void Shape<Float, Spectrum>::optix_prepare_ias(const OptixDeviceContext& /*context*/,
+                                                           std::vector<OptixInstance>& /*instances*/,
+                                                           uint32_t /*instance_id*/,
+                                                           const ScalarTransform4f& /*transf*/) {
+    NotImplementedError("optix_prepare_ias");
+}
+
+MTS_VARIANT void Shape<Float, Spectrum>::optix_build_input(OptixBuildInput &build_input) const {
+    build_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
+    // Assumes the aabb is always the first member of the data struct
+    build_input.aabbArray.aabbBuffers   = (CUdeviceptr*) &m_optix_data_ptr;
+    build_input.aabbArray.numPrimitives = 1;
+    build_input.aabbArray.strideInBytes = sizeof(OptixAabb);
+    build_input.aabbArray.flags         = optix_geometry_flags;
+    build_input.aabbArray.numSbtRecords = 1;
 }
 #endif
 
@@ -249,46 +322,53 @@ MTS_VARIANT Float Shape<Float, Spectrum>::pdf_direction(const Interaction3f & /*
     return pdf;
 }
 
-MTS_VARIANT std::pair<typename Shape<Float, Spectrum>::Mask, Float>
-Shape<Float, Spectrum>::ray_intersect(const Ray3f & /*ray*/, Float * /*cache*/,
-                                      Mask /*active*/) const {
-    NotImplementedError("ray_intersect");
+MTS_VARIANT typename Shape<Float, Spectrum>::PreliminaryIntersection3f
+Shape<Float, Spectrum>::ray_intersect_preliminary(const Ray3f & /*ray*/, Mask /*active*/) const {
+    NotImplementedError("ray_intersect_preliminary");
 }
 
-MTS_VARIANT typename Shape<Float, Spectrum>::Mask Shape<Float, Spectrum>::ray_test(const Ray3f &ray,
-                                                                                   Mask active) const {
+MTS_VARIANT typename Shape<Float, Spectrum>::Mask
+Shape<Float, Spectrum>::ray_test(const Ray3f &ray, Mask active) const {
     MTS_MASK_ARGUMENT(active);
-
-    Float unused[MTS_KD_INTERSECTION_CACHE_SIZE];
-    return ray_intersect(ray, unused).first;
-}
-
-MTS_VARIANT void Shape<Float, Spectrum>::fill_surface_interaction(const Ray3f & /*ray*/,
-                                                                  const Float * /*cache*/,
-                                                                  SurfaceInteraction3f & /*si*/,
-                                                                  Mask /*active*/) const {
-    NotImplementedError("fill_surface_interaction");
+    return ray_intersect_preliminary(ray, active).is_valid();
 }
 
 MTS_VARIANT typename Shape<Float, Spectrum>::SurfaceInteraction3f
-Shape<Float, Spectrum>::ray_intersect(const Ray3f &ray, Mask active) const {
-    MTS_MASK_ARGUMENT(active);
-
-    SurfaceInteraction3f si = zero<SurfaceInteraction3f>();
-    Float cache[MTS_KD_INTERSECTION_CACHE_SIZE];
-    auto [success, t] = ray_intersect(ray, cache, active);
-    active &= success;
-    si.t = select(active, t,  math::Infinity<Float>);
-
-    if (any(active))
-        fill_surface_interaction(ray, cache, si, active);
-    return si;
+Shape<Float, Spectrum>::compute_surface_interaction(const Ray3f & /*ray*/,
+                                                    PreliminaryIntersection3f /*pi*/,
+                                                    HitComputeFlags /*flags*/,
+                                                    Mask /*active*/) const {
+    NotImplementedError("compute_surface_interaction");
 }
 
-MTS_VARIANT std::pair<typename Shape<Float, Spectrum>::Vector3f, typename Shape<Float, Spectrum>::Vector3f>
-Shape<Float, Spectrum>::normal_derivative(const SurfaceInteraction3f & /*si*/,
-                                          bool /*shading_frame*/, Mask /*active*/) const {
-    NotImplementedError("normal_derivative");
+MTS_VARIANT typename Shape<Float, Spectrum>::SurfaceInteraction3f
+Shape<Float, Spectrum>::ray_intersect(const Ray3f &ray, HitComputeFlags flags, Mask active) const {
+    MTS_MASK_ARGUMENT(active);
+
+    auto pi = ray_intersect_preliminary(ray, active);
+    active &= pi.is_valid();
+
+    return pi.compute_surface_interaction(ray, flags, active);
+}
+
+MTS_VARIANT typename Shape<Float, Spectrum>::UnpolarizedSpectrum
+Shape<Float, Spectrum>::eval_attribute(const std::string & /*name*/,
+                                       const SurfaceInteraction3f & /*si*/,
+                                       Mask /*active*/) const {
+    NotImplementedError("eval_attribute");
+}
+
+MTS_VARIANT Float
+Shape<Float, Spectrum>::eval_attribute_1(const std::string& /*name*/,
+                                         const SurfaceInteraction3f &/*si*/,
+                                         Mask /*active*/) const {
+    NotImplementedError("eval_attribute_1");
+}
+MTS_VARIANT typename Shape<Float, Spectrum>::Color3f
+Shape<Float, Spectrum>::eval_attribute_3(const std::string& /*name*/,
+                                         const SurfaceInteraction3f &/*si*/,
+                                         Mask /*active*/) const {
+    NotImplementedError("eval_attribute_3");
 }
 
 MTS_VARIANT typename Shape<Float, Spectrum>::ScalarFloat
@@ -319,6 +399,8 @@ Shape<Float, Spectrum>::effective_primitive_count() const {
 }
 
 MTS_VARIANT void Shape<Float, Spectrum>::traverse(TraversalCallback *callback) {
+    callback->put_parameter("to_world", m_to_world);
+
     callback->put_object("bsdf", m_bsdf.get());
     if (m_emitter)
         callback->put_object("emitter", m_emitter.get());
@@ -330,16 +412,45 @@ MTS_VARIANT void Shape<Float, Spectrum>::traverse(TraversalCallback *callback) {
         callback->put_object("exterior_medium", m_exterior_medium.get());
 }
 
-MTS_VARIANT void Shape<Float, Spectrum>::parameters_changed() {
-    m_bsdf->parameters_changed();
+MTS_VARIANT
+void Shape<Float, Spectrum>::parameters_changed(const std::vector<std::string> &/*keys*/) {
     if (m_emitter)
-        m_emitter->parameters_changed();
+        m_emitter->parameters_changed({"parent"});
     if (m_sensor)
-        m_sensor->parameters_changed();
-    if (m_interior_medium)
-        m_interior_medium->parameters_changed();
-    if (m_exterior_medium)
-        m_exterior_medium->parameters_changed();
+        m_sensor->parameters_changed({"parent"});
+}
+
+MTS_VARIANT bool Shape<Float, Spectrum>::parameters_grad_enabled() const {
+    return false;
+}
+
+MTS_VARIANT void Shape<Float, Spectrum>::set_children() {
+    if (m_emitter)
+        m_emitter->set_shape(this);
+    if (m_sensor)
+        m_sensor->set_shape(this);
+}
+
+MTS_VARIANT
+typename Shape<Float, Spectrum>::SurfaceInteraction3f
+Shape<Float, Spectrum>::eval_parameterization(const Point2f &, Mask) const {
+    NotImplementedError("eval_parameterization");
+}
+
+MTS_VARIANT std::string Shape<Float, Spectrum>::get_children_string() const {
+    std::vector<std::pair<std::string, const Object*>> children;
+    children.push_back({ "bsdf", m_bsdf });
+    if (m_emitter) children.push_back({ "emitter", m_emitter });
+    if (m_sensor) children.push_back({ "sensor", m_sensor });
+    if (m_interior_medium) children.push_back({ "interior_medium", m_interior_medium });
+    if (m_exterior_medium) children.push_back({ "exterior_medium", m_exterior_medium });
+
+    std::ostringstream oss;
+    size_t i = 0;
+    for (const auto& [name, child]: children)
+        oss << name << " = " << child << (++i < children.size() ? ",\n" : "");
+
+    return oss.str();
 }
 
 MTS_IMPLEMENT_CLASS_VARIANT(Shape, Object, "shape")

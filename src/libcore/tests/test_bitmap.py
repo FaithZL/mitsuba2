@@ -106,6 +106,27 @@ def test_convert_rgb_y_gamma(tmpdir):
     assert np.allclose(b3, [to_srgb(0.212671)*255, to_srgb(0.715160)*255, to_srgb(0.072169)*255], atol=1)
 
 
+def test_premultiply_alpha(tmpdir):
+    # Tests RGBA(float64) -> Y (float32) conversion
+    b1 = Bitmap(Bitmap.PixelFormat.RGBA, Struct.Type.Float64, [3, 1])
+    assert b1.premultiplied_alpha()
+    b1.set_premultiplied_alpha(False)
+    assert not b1.premultiplied_alpha()
+
+    b2 = np.array(b1, copy=False)
+    b2[:] = [[[1, 0, 0, 1], [0, 1, 0, 0.5], [0, 0, 1, 0]]]
+
+    # Premultiply
+    b3 = np.array(b1.convert(Bitmap.PixelFormat.RGBA, Struct.Type.Float32, False, Bitmap.AlphaTransform.Premultiply)).ravel()
+    assert np.allclose(b3, [1.0, 0.0, 0.0, 1.0, 0.0, 0.5, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0])
+
+    # Unpremultiply
+    b1.set_premultiplied_alpha(True)
+    b3 = np.array(b1.convert(Bitmap.PixelFormat.RGBA, Struct.Type.Float32, False, Bitmap.AlphaTransform.Unpremultiply)).ravel()
+    assert np.allclose(b3, [1.0, 0.0, 0.0, 1.0, 0.0, 2, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0])
+
+
+
 def test_read_write_jpeg(tmpdir):
     np.random.seed(12345)
     tmp_file = os.path.join(str(tmpdir), "out.jpg")
@@ -188,7 +209,7 @@ def test_read_write_ppm(tmpdir):
 
 
 def test_read_bmp():
-    b = Bitmap(find_resource('resources/data/tests/bitmap/flower.bmp'))
+    b = Bitmap(find_resource('resources/data/common/textures/flower.bmp'))
     ref = [ 136.50910448, 134.07641791,  85.67253731 ]
     assert np.allclose(np.mean(b, axis=(0, 1)), ref)
 

@@ -8,7 +8,7 @@
 
 
 [1]: https://readthedocs.org/projects/mitsuba2/badge/?version=master
-[2]: https://mitsuba2.readthedocs.io/en/latest/src/getting_started/intro/
+[2]: https://mitsuba2.readthedocs.io/en/latest/src/getting_started/intro.html
 [3]: https://rgl-ci.epfl.ch/app/rest/builds/buildType(id:Mitsuba2_Build)/statusIcon.svg
 [4]: https://rgl-ci.epfl.ch/viewType.html?buildTypeId=Mitsuba2_Build&guest=1
 [5]: https://ci.appveyor.com/api/projects/status/eb84mmtvnt8ko8bh/branch/master?svg=true
@@ -20,7 +20,7 @@
 
 
 [1]: https://readthedocs.org/projects/mitsuba2/badge/?version=latest
-[2]: https://mitsuba2.readthedocs.io/en/latest/src/getting_started/intro/
+[2]: https://mitsuba2.readthedocs.io/en/latest/src/getting_started/intro.html
 
 Mitsuba 2 is a research-oriented rendering system written in portable C++17. It
 consists of a small set of core libraries and a wide variety of plugins that
@@ -89,6 +89,7 @@ This project was created by [Wenzel Jakob](http://rgl.epfl.ch/people/wjakob).
 Significant features and/or improvements to the code were contributed by
 [Merlin Nimier-David](https://merlin.nimierdavid.fr/),
 [Guillaume Loubet](https://maverick.inria.fr/Membres/Guillaume.Loubet/),
+[Benoît Ruiz](https://github.com/4str0m),
 [Sébastien Speierer](https://github.com/Speierers),
 [Delio Vicini](https://dvicini.github.io/),
 and [Tizian Zeltner](https://tizianzeltner.com/).

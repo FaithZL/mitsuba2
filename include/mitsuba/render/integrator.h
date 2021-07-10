@@ -13,6 +13,7 @@
 #include <mitsuba/render/records.h>
 #include <mitsuba/render/scene.h>
 #include <mitsuba/render/shape.h>
+#include <mitsuba/render/medium.h>
 
 NAMESPACE_BEGIN(mitsuba)
 
@@ -69,7 +70,7 @@ template <typename Float, typename Spectrum>
 class MTS_EXPORT_RENDER SamplingIntegrator : public Integrator<Float, Spectrum> {
 public:
     MTS_IMPORT_BASE(Integrator)
-    MTS_IMPORT_TYPES(Scene, Sensor, Film, ImageBlock, Sampler)
+    MTS_IMPORT_TYPES(Scene, Sensor, Film, ImageBlock, Medium, Sampler)
 
     /**
      * \brief Sample the incident radiance along a ray.
@@ -82,6 +83,10 @@ public:
      *
      * \param ray
      *    A ray, optionally with differentials
+     *
+     * \param medium
+     *    If the ray is inside a medium, this parameter holds a pointer to that
+     *    medium
      *
      * \param active
      *    A mask that indicates which SIMD lanes are active
@@ -103,12 +108,13 @@ public:
      *    In the Python bindings, this function returns the \c aov output
      *    argument as an additional return value. In other words:
      *    <tt>
-     *        (spec, mask, aov) = integrator.sample(scene, sampler, ray, active)
+     *        (spec, mask, aov) = integrator.sample(scene, sampler, ray, medium, active)
      *    </tt>
      */
     virtual std::pair<Spectrum, Mask> sample(const Scene *scene,
                                              Sampler *sampler,
                                              const RayDifferential3f &ray,
+                                             const Medium *medium = nullptr,
                                              Float *aovs = nullptr,
                                              Mask active = true) const;
 
@@ -152,7 +158,8 @@ protected:
                               Sampler *sampler,
                               ImageBlock *block,
                               Float *aovs,
-                              size_t sample_count = size_t(-1)) const;
+                              size_t sample_count,
+                              size_t block_id) const;
 
     void render_sample(const Scene *scene,
                        const Sensor *sensor,
@@ -187,6 +194,9 @@ protected:
 
     /// Timer used to enforce the timeout.
     Timer m_render_timer;
+
+    /// Flag for disabling direct visibility of emitters
+    bool m_hide_emitters;
 };
 
 /*
@@ -210,7 +220,6 @@ protected:
 protected:
     int m_max_depth;
     int m_rr_depth;
-    bool m_hide_emitters;
 };
 
 MTS_EXTERN_CLASS_RENDER(Integrator)

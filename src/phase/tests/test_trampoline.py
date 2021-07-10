@@ -37,7 +37,7 @@ def create_phasefunction():
 def create_medium_scene(phase_function='isotropic', spp=8):
     scene = load_string(f"""
         <scene version='2.0.0'>
-            <integrator type="volpath"/>
+            <integrator type="volpathmis"/>
             <sensor type="perspective">
                 <transform name="to_world">
                     <lookat target="0.0,   0.0, 1.0"
@@ -55,7 +55,7 @@ def create_medium_scene(phase_function='isotropic', spp=8):
             </sensor>
             <emitter type="constant" />
             <shape type="ply">
-                <string name="filename" value="resources/data/ply/teapot.ply"/>
+                <string name="filename" value="resources/data/common/meshes/teapot.ply"/>
                 <bsdf type="null" />
                 <medium name="interior" type="homogeneous">
                     <rgb name="sigma_t" value="1.0, 1.0, 1.0"/>

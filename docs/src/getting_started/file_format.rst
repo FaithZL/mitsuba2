@@ -329,6 +329,13 @@ left-multiplied onto the current one. The following choices are available:
 
       <matrix value="0 -0.53 0 -1.79 0.92 0 0 8.03 0 0 0.53 0 0 0 0 1"/>
 
+* Explicit 3x3 matrices in row-major order. Internally, this will be converted to a 4x4 matrix with the same last row and column as the identity matrix.
+
+  .. code-block:: xml
+
+      <matrix value="0.57 0.2 0 0.1 -1 0 0 0 1"/>
+
+
 * `lookat` transformations -- this is primarily useful for setting up cameras. The `origin` coordinates specify the camera origin, `target` is the point that the camera will look at, and the (optional) `up` parameter determines the *upward* direction in the final rendered image.
 
   .. code-block:: xml
@@ -400,7 +407,6 @@ precedence when no command line arguments are given. The syntax for this is:
 
 and must precede the occurrences of the parameter in the XML file.
 
-
 Including external files
 ------------------------
 
@@ -437,3 +443,15 @@ can be accomplished using the ``alias as=".."`` tag:
 After this statement, the diffuse scattering model will be bound to *both*
 identifiers ``my_material_1`` and ``my_material_2``.
 
+External resource folders
+-------------------------
+
+Using the ``path`` tag, it is possible to add a path to the list of search paths. This can
+be useful for instance when some meshes and textures are stored in a different directory, (e.g. when
+shared with other scenes). If the path is a relative path, Mitsuba 2 will first try to interpret it
+relative to the scene directory, then to other paths that are already on the search path (e.g. added
+using the ``-a <path1>;<path2>;..`` command line argument).
+
+.. code-block:: xml
+
+    <path value="../../my_resources"/>

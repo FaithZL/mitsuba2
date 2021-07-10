@@ -22,7 +22,7 @@ Arbitrary Output Variables integrator (:monosp:`aov`)
      respective output will be put into distinct images.
 
 
-This integrator returns one or more AOVs (Arbitraty Output Variables) describing the visible
+This integrator returns one or more AOVs (Arbitrary Output Variables) describing the visible
 surfaces.
 
 .. subfigstart::
@@ -65,7 +65,7 @@ template <typename Float, typename Spectrum>
 class AOVIntegrator final : public SamplingIntegrator<Float, Spectrum> {
 public:
     MTS_IMPORT_BASE(SamplingIntegrator)
-    MTS_IMPORT_TYPES(Scene, Sampler)
+    MTS_IMPORT_TYPES(Scene, Sampler, Medium)
 
     enum class Type {
         Depth,
@@ -156,6 +156,7 @@ public:
     std::pair<Spectrum, Mask> sample(const Scene *scene,
                                      Sampler * sampler,
                                      const RayDifferential3f &ray,
+                                     const Medium *medium,
                                      Float *aovs,
                                      Mask active) const override {
         MTS_MASKED_FUNCTION(ProfilerPhase::SamplingIntegratorSample, active);
@@ -163,8 +164,7 @@ public:
         std::pair<Spectrum, Mask> result { 0.f, false };
 
         SurfaceInteraction3f si = scene->ray_intersect(ray, active);
-        active = si.is_valid();
-        si[!active] = zero<SurfaceInteraction3f>();
+        si[!si.is_valid()] = zero<SurfaceInteraction3f>();
         size_t ctr = 0;
 
         for (size_t i = 0; i < m_aov_types.size(); ++i) {
@@ -220,7 +220,7 @@ public:
 
                 case Type::IntegratorRGBA: {
                         std::pair<Spectrum, Mask> result_sub =
-                            m_integrators[ctr].first->sample(scene, sampler, ray, aovs, active);
+                            m_integrators[ctr].first->sample(scene, sampler, ray, medium, aovs, active);
                         aovs += m_integrators[ctr].second;
 
                         UnpolarizedSpectrum spec_u = depolarize(result_sub.first);
@@ -268,7 +268,7 @@ public:
             << "  aovs = " << m_aov_names << "," << std::endl
             << "  integrators = [" << std::endl;
         for (size_t i = 0; i < m_integrators.size(); ++i) {
-            oss << "    " << string::indent(m_integrators[i].first->to_string(), 4);
+            oss << "    " << string::indent(m_integrators[i].first, 4);
             if (i + 1 < m_integrators.size())
                 oss << ",";
             oss << std::endl;

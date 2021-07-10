@@ -1,5 +1,5 @@
-#include <mitsuba/python/python.h>
 #include <mitsuba/core/vector.h>
+#include <mitsuba/python/python.h>
 
 MTS_PY_DECLARE(Object);
 MTS_PY_DECLARE(BoundingBox);
@@ -7,12 +7,14 @@ MTS_PY_DECLARE(BoundingSphere);
 MTS_PY_DECLARE(Frame);
 MTS_PY_DECLARE(Ray);
 MTS_PY_DECLARE(DiscreteDistribution);
+MTS_PY_DECLARE(DiscreteDistribution2D);
 MTS_PY_DECLARE(ContinuousDistribution);
 MTS_PY_DECLARE(IrregularContinuousDistribution);
 MTS_PY_DECLARE(Hierarchical2D);
 MTS_PY_DECLARE(Marginal2D);
 MTS_PY_DECLARE(math);
 MTS_PY_DECLARE(qmc);
+MTS_PY_DECLARE(Properties);
 MTS_PY_DECLARE(rfilter);
 MTS_PY_DECLARE(sample_tea);
 MTS_PY_DECLARE(spline);
@@ -252,10 +254,12 @@ PYBIND11_MODULE(MODULE_NAME, m) {
     MTS_PY_IMPORT(BoundingSphere);
     MTS_PY_IMPORT(Frame);
     MTS_PY_IMPORT(DiscreteDistribution);
+    MTS_PY_IMPORT(DiscreteDistribution2D);
     MTS_PY_IMPORT(ContinuousDistribution);
     MTS_PY_IMPORT(IrregularContinuousDistribution);
     MTS_PY_IMPORT_SUBMODULE(math);
     MTS_PY_IMPORT(qmc);
+    MTS_PY_IMPORT(Properties);
     MTS_PY_IMPORT(rfilter);
     MTS_PY_IMPORT(sample_tea);
     MTS_PY_IMPORT_SUBMODULE(spline);

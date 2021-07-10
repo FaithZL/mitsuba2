@@ -1,12 +1,6 @@
 # Add a CMake parameter for choosing a desired Python version
 set(MTS_PYTHON_VERSION "" CACHE STRING "Python version to use for compiling the mitsuba-python library")
 
-if (NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/openexr/OpenEXR")
-  message(FATAL_ERROR "The Mitsuba dependencies are missing! "
-    "You probably did not clone the project with --recursive. It is possible to recover "
-    "by invoking\n$ git submodule update --init --recursive")
-endif()
-
 # Try to autodetect Python (can be overridden manually if needed)
 if (MTS_ENABLE_PYTHON)
   list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/pybind11/tools")
@@ -53,7 +47,7 @@ if (MTS_ENABLE_EMBREE)
   set(EMBREE_GEOMETRY_CURVE         OFF CACHE BOOL " " FORCE)
   set(EMBREE_GEOMETRY_GRID          OFF CACHE BOOL " " FORCE)
   set(EMBREE_GEOMETRY_SUBDIVISION   OFF CACHE BOOL " " FORCE)
-  set(EMBREE_GEOMETRY_INSTANCE      OFF CACHE BOOL " " FORCE)
+  set(EMBREE_GEOMETRY_INSTANCE      ON  CACHE BOOL " " FORCE)
   set(EMBREE_GEOMETRY_USER          ON  CACHE BOOL " " FORCE)
 
   string(TOUPPER "${ENOKI_ARCH_FLAGS}" ENOKI_ARCH_FLAGS_UPPER)
